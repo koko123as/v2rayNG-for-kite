@@ -522,9 +522,13 @@ func DetectCoreConfig(content string) string {
 	if trimmed == "" {
 		return ""
 	}
+	// JSONC may open with a comment before the root object.
+	if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+		trimmed = strings.TrimSpace(removeJSONComments(trimmed))
+	}
 	if strings.HasPrefix(trimmed, "{") {
 		var root map[string]json.RawMessage
-		if json.Unmarshal([]byte(trimmed), &root) != nil {
+		if json.Unmarshal([]byte(normalizeJSONC(trimmed)), &root) != nil {
 			return ""
 		}
 		for _, key := range []string{"outbounds", "inbounds"} {
@@ -542,11 +546,33 @@ func DetectCoreConfig(content string) string {
 				}
 			}
 		}
+		var endpoints []json.RawMessage
+		if raw, ok := root["endpoints"]; ok && json.Unmarshal(raw, &endpoints) == nil && len(endpoints) > 0 {
+			return CoreSingBox
+		}
+		var schema string
+		if raw, ok := root["$schema"]; ok && json.Unmarshal(raw, &schema) == nil && strings.Contains(strings.ToLower(schema), "sing-box") {
+			return CoreSingBox
+		}
 		if _, ok := root["routing"]; ok {
 			return CoreXray
 		}
 		if _, ok := root["route"]; ok {
 			return CoreSingBox
+		}
+		// sing-box 1.12+ DNS servers are objects with "type".
+		var dns struct {
+			Servers []json.RawMessage `json:"servers"`
+		}
+		if raw, ok := root["dns"]; ok && json.Unmarshal(raw, &dns) == nil {
+			for _, server := range dns.Servers {
+				var item map[string]any
+				if json.Unmarshal(server, &item) == nil {
+					if _, ok := item["type"]; ok {
+						return CoreSingBox
+					}
+				}
+			}
 		}
 		return ""
 	}

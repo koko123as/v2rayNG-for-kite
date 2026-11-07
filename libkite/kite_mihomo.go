@@ -174,7 +174,7 @@ func parseMihomo(content string, options *CoreOptions) (*mihomoConfig.Config, er
 	}
 	mihomoConstant.SetHomeDir(home)
 	syncGeoForMihomo(options.AssetDir, home)
-	raw, err := mihomoConfig.UnmarshalRawConfig([]byte(content))
+	raw, err := mihomoConfig.UnmarshalRawConfig([]byte(strings.TrimPrefix(content, "\ufeff")))
 	if err != nil {
 		return nil, fmt.Errorf("mihomo config: %w", err)
 	}
@@ -306,7 +306,7 @@ func UpdateSystemDNS(servers string) {
 
 // CheckMihomoConfig parses a mihomo profile without starting it.
 func CheckMihomoConfig(content string) error {
-	raw, err := mihomoConfig.UnmarshalRawConfig([]byte(content))
+	raw, err := mihomoConfig.UnmarshalRawConfig([]byte(strings.TrimPrefix(content, "\ufeff")))
 	if err != nil {
 		return err
 	}

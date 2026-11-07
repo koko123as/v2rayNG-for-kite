@@ -79,7 +79,7 @@ func parseSingBoxOptions(ctx context.Context, content string) (option.Options, e
 // sniff rules for the app's inbounds are put first.
 func prepareSingBoxJSON(content string, options *CoreOptions) (string, error) {
 	var root map[string]any
-	if err := json.Unmarshal([]byte(content), &root); err != nil {
+	if err := json.Unmarshal([]byte(normalizeJSONC(content)), &root); err != nil {
 		return "", E.Cause(err, "decode sing-box config")
 	}
 	var inbounds []any
@@ -312,7 +312,7 @@ func currentSingBox() *singBoxRunning {
 // it.
 func CheckSingBoxConfig(content string) error {
 	ctx := singBoxContext("")
-	options, err := parseSingBoxOptions(ctx, content)
+	options, err := parseSingBoxOptions(ctx, normalizeJSONC(content))
 	if err != nil {
 		return err
 	}

@@ -367,3 +367,92 @@ func TestKiteCoreStartStopProxyMode(t *testing.T) {
 		}
 	}
 }
+
+// A sing-box 1.14 configuration as sing-box clients export it: JSONC with
+// comments and trailing commas, a byte order mark, $schema, a tun inbound,
+// new-format DNS servers, remote rule sets, selector/urltest groups and a
+// VLESS REALITY node.
+const testSingBox114JSONC = "\ufeff" + `{
+  "$schema": "https://sing-box.sagernet.org/schema.json",
+  // logging
+  "log": {"level": "warn", "timestamp": true},
+  "dns": {
+    "servers": [
+      {"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": "proxy"},
+      {"type": "local", "tag": "local"}, /* the system resolver */
+    ],
+    "rules": [{"rule_set": "geosite-cn", "server": "local"}],
+    "final": "remote",
+  },
+  "inbounds": [
+    {"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"], "auto_route": true, "strict_route": true, "stack": "mixed"},
+  ],
+  "outbounds": [
+    {"type": "selector", "tag": "proxy", "outbounds": ["auto", "hk-reality", "direct"], "default": "auto"},
+    {"type": "urltest", "tag": "auto", "outbounds": ["hk-reality"], "url": "https://www.gstatic.com/generate_204", "interval": "3m"},
+    {
+      "type": "vless", "tag": "hk-reality", "server": "203.0.113.10", "server_port": 443,
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30811", "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true, "server_name": "www.microsoft.com",
+        "utls": {"enabled": true, "fingerprint": "chrome"},
+        "reality": {"enabled": true, "public_key": "PbXP1oGqStTueCnuvbdxVGGzL0MQWu94BbywFUtzSr4", "short_id": "0123abcd"},
+      },
+    },
+    {"type": "direct", "tag": "direct"},
+  ],
+  "route": {
+    "rule_set": [
+      {"type": "remote", "tag": "geosite-cn", "format": "binary", "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs", "download_detour": "direct"},
+    ],
+    "rules": [
+      {"action": "sniff"},
+      {"protocol": "dns", "action": "hijack-dns"},
+      {"rule_set": "geosite-cn", "outbound": "direct"}, // trailing comma below
+    ],
+    "final": "proxy",
+    "default_domain_resolver": "local",
+    "auto_detect_interface": true,
+  },
+  "experimental": {"cache_file": {"enabled": true}, "clash_api": {"external_controller": "127.0.0.1:9090"}},
+}`
+
+func TestNormalizeJSONC(t *testing.T) {
+	got := normalizeJSONC("\ufeff{\"a\": \"x // not a comment, /* nor this */\", // c\n \"b\": [1, 2,], /* d */ \"c\": {\"e\": \"\\\"q,]\",},}")
+	var root map[string]any
+	if err := json.Unmarshal([]byte(got), &root); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, got)
+	}
+	if root["a"] != "x // not a comment, /* nor this */" || len(root["b"].([]any)) != 2 || root["c"].(map[string]any)["e"] != "\"q,]" {
+		t.Fatalf("normalized = %v", root)
+	}
+}
+
+func TestSingBox114JSONC(t *testing.T) {
+	if got := DetectCoreConfig(testSingBox114JSONC); got != CoreSingBox {
+		t.Fatalf("DetectCoreConfig = %q", got)
+	}
+	for content, expected := range map[string]string{
+		`{"endpoints": [{"type": "wireguard", "tag": "wg", "address": ["10.0.0.2/32"], "private_key": "k", "peers": []}]}`: CoreSingBox,
+		`{"$schema": "https://sing-box.sagernet.org/schema.json", "log": {"level": "info"}}`:                             CoreSingBox,
+		`{"dns": {"servers": [{"type": "local", "tag": "local"}]}}`:                                                     CoreSingBox,
+		`{"outbounds": [{"type": "direct", "tag": "direct"},], // only direct` + "\n}":                                  CoreSingBox,
+		"// exported\n{\"outbounds\": [{\"type\": \"direct\", \"tag\": \"direct\"}]}": CoreSingBox,
+	} {
+		if got := DetectCoreConfig(content); got != expected {
+			t.Errorf("DetectCoreConfig(%q) = %q, want %q", firstLine(content), got, expected)
+		}
+	}
+	prepared, err := prepareSingBoxJSON(testSingBox114JSONC, &CoreOptions{Mode: ModeProxy, MixedPort: 10808, HomeDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := decodeJSON(t, prepared)
+	outbounds := root["outbounds"].([]any)
+	if len(outbounds) != 4 || outbounds[2].(map[string]any)["type"] != "vless" {
+		t.Fatalf("outbounds = %v", outbounds)
+	}
+	if err := CheckSingBoxConfig(prepared); err != nil {
+		t.Fatal(err)
+	}
+}
