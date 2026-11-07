@@ -55,7 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.core.NativeConfigDetector
 import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.extension.toastSuccess
@@ -112,7 +114,9 @@ class ServerCustomConfigActivity : BaseComponentActivity() {
             return false
         }
 
-        val parsedProfile = try {
+        // A mihomo YAML or sing-box JSON is stored as written and runs on that core.
+        val nativeCore = NativeConfigDetector.detect(content)?.takeIf { it != CoreType.XRAY }
+        val parsedProfile = if (nativeCore != null) null else try {
             CustomFmt.parse(content)
         } catch (e: Exception) {
             LogUtil.e(
@@ -139,6 +143,7 @@ class ServerCustomConfigActivity : BaseComponentActivity() {
         config.remarks =
             remarks.ifEmpty { parsedProfile?.remarks.orEmpty() }
 
+        config.coreType = nativeCore?.value
         config.server = parsedProfile?.server
         config.serverPort = parsedProfile?.serverPort
         config.description =

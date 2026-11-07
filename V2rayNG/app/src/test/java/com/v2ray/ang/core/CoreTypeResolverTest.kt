@@ -92,4 +92,11 @@ class CoreTypeResolverTest {
         assertEquals(listOf(XrayOnlyFeature.FRAGMENT, XrayOnlyFeature.MUX), CoreTypeResolver.ignoredGlobalFeatures(CoreType.SING_BOX, true, true))
         assertEquals(emptyList<XrayOnlyFeature>(), CoreTypeResolver.ignoredGlobalFeatures(CoreType.XRAY, true, true))
     }
+
+    @Test
+    fun subscriptionUserAgentAsksForTheDefaultCoresFormat() {
+        assertNull(CoreTypeResolver.subscriptionUserAgent(CoreType.XRAY))
+        assertEquals("clash.meta", CoreTypeResolver.subscriptionUserAgent(CoreType.MIHOMO))
+        assertTrue(CoreTypeResolver.subscriptionUserAgent(CoreType.SING_BOX)!!.startsWith("sing-box "))
+    }
 }

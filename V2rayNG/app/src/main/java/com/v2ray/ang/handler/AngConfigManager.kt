@@ -5,12 +5,15 @@ import android.graphics.Bitmap
 import android.text.TextUtils
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
+import com.v2ray.ang.core.CoreTypeResolver
+import com.v2ray.ang.core.NativeConfigDetector
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.UrlContentRequest
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
 import com.v2ray.ang.dto.entities.SubscriptionUsageInfo
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.fmt.CustomFmt
@@ -327,6 +330,10 @@ object AngConfigManager {
         if (server == null) {
             return 0
         }
+        val nativeCore = NativeConfigDetector.detect(server)
+        if (nativeCore == CoreType.MIHOMO || nativeCore == CoreType.SING_BOX) {
+            return importNativeConfig(server, nativeCore, subid, append)
+        }
         if (server.contains("inbounds")
             && server.contains("outbounds")
             && server.contains("routing")
@@ -391,6 +398,37 @@ object AngConfigManager {
         } else {
             return 0
         }
+    }
+
+    /**
+     * Stores a full mihomo or sing-box configuration as one CUSTOM profile of that core. The
+     * configuration is kept as written; libkite replaces its inbounds for the run mode.
+     */
+    private fun importNativeConfig(server: String, core: CoreType, subid: String, append: Boolean): Int {
+        return try {
+            val config = createNativeProfile(core, MmkvManager.decodeSubscription(subid)?.remarks)
+            config.subscriptionId = subid
+            commitProfiles(
+                configs = listOf(ParsedProfile(config, server)),
+                subid = subid,
+                append = append,
+            )
+            1
+        } catch (e: ProfileStorageException) {
+            throw e
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to import ${core.value} config", e)
+            0
+        }
+    }
+
+    /** A CUSTOM profile for a native configuration of [core]; [remarks] defaults to the core name. */
+    fun createNativeProfile(core: CoreType, remarks: String?): ProfileItem {
+        val config = ProfileItem.create(EConfigType.CUSTOM)
+        config.coreType = core.value
+        config.remarks = remarks?.takeIf { it.isNotBlank() } ?: "${core.displayName} ${System.currentTimeMillis()}"
+        config.description = core.displayName
+        return config
     }
 
     /**
@@ -485,7 +523,9 @@ object AngConfigManager {
                 }
             }
             LogUtil.i(AppConfig.TAG, url)
-            val userAgent = it.subscription.userAgent
+            // Without a custom User-Agent the provider is asked for the default core's format.
+            val userAgent = it.subscription.userAgent?.takeIf { ua -> ua.isNotBlank() }
+                ?: CoreTypeResolver.subscriptionUserAgent(CoreTypeResolver.globalDefault())
             val requestHeaders = it.subscription.requestHeaders
             val proxyUsername = SettingsManager.getSocksUsername()
             val proxyPassword = SettingsManager.getSocksPassword()
