@@ -59,7 +59,7 @@ object SingboxConfigBuilder {
         val route = JsonObject()
         route.addProperty("final", PROXY)
         root.add("route", route)
-        // routing rules, rule-sets and DNS: SingboxRoutingBuilder
+        SingboxRoutingBuilder.apply(root, route, state.tags, settings, forSpeedtest)
         return Result(KiteProfileSupport.toPrettyJson(root), state.skipped)
     }
 

@@ -62,7 +62,7 @@ object MihomoConfigBuilder {
             return Result(KiteProfileSupport.toPrettyJson(root), skipped)
         }
 
-        root.add("rules", jsonArray(listOf("MATCH,$PROXY"))) // routing and DNS: MihomoRoutingBuilder
+        MihomoRoutingBuilder.apply(root, names, settings, skipped)
         return Result(KiteProfileSupport.toPrettyJson(root), skipped)
     }
 
