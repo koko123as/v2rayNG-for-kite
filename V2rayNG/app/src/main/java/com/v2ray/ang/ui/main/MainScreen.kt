@@ -63,6 +63,7 @@ fun MainScreen(
     }
 
     var shareTarget by remember { mutableStateOf<Triple<String, ProfileItem, Boolean>?>(null) }
+    var coreTarget by remember { mutableStateOf<Pair<String, ProfileItem>?>(null) }
     val removeServer: (String, String) -> Unit = { guid, profileName ->
         if (confirmRemove) {
             showRemoveConfirm = ServerDeleteTarget(guid, profileName)
@@ -131,6 +132,19 @@ fun MainScreen(
             onDismiss = { shareTarget = null },
             onAction = onAction,
             onRemove = removeServer,
+            onSelectCore = { targetGuid, targetProfile -> coreTarget = targetGuid to targetProfile },
+        )
+    }
+    uiState.coreGroups?.let { groups ->
+        CoreGroupsDialog(groups = groups, onAction = onAction)
+    }
+    coreTarget?.let { (guid, profile) ->
+        CoreSelectDialog(
+            guid = guid,
+            profile = profile,
+            defaultCore = uiState.defaultCore,
+            onDismiss = { coreTarget = null },
+            onAction = onAction,
         )
     }
     if (shareQRCodeBitmap != null) {
@@ -171,6 +185,7 @@ fun MainScreen(
                     onMoreMenuAction = { action ->
                         when (action) {
                             MainMoreMenuAction.RestartService -> onAction(MainAction.RestartService)
+                            MainMoreMenuAction.CoreGroups -> onAction(MainAction.ShowCoreGroups)
                             MainMoreMenuAction.DeleteAll -> showDelAllConfirm = true
                             MainMoreMenuAction.DeleteDuplicate -> showDelDuplicateConfirm = true
                             MainMoreMenuAction.DeleteInvalid -> showDelInvalidConfirm = true

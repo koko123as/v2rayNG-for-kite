@@ -41,16 +41,19 @@ class FileChooserHelper(private val activity: ComponentActivity) {
      * Launch file chooser with ACTION_GET_CONTENT intent to select an existing file.
      *
      * @param mimeType MIME type filter for files
+     * @param mimeTypes Several accepted MIME types; the chooser opens on all files and offers these
      * @param onResult Callback invoked with the selected file URI (null if cancelled)
      */
     fun launch(
         mimeType: String = "*/*",
+        mimeTypes: Array<String>? = null,
         onResult: (Uri?) -> Unit
     ) {
         fileChooserCallback = onResult
 
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = mimeType
+            type = if (mimeTypes.isNullOrEmpty()) mimeType else "*/*"
+            if (!mimeTypes.isNullOrEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
             addCategory(Intent.CATEGORY_OPENABLE)
         }
 

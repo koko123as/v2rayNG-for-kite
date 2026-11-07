@@ -1,0 +1,5 @@
+# Copied from the AndroidLibXrayLite submodule by build.sh; the submodule is
+# the only source of the libv2ray Xray API.
+/libv2ray_*.go
+/assets/
+/build/

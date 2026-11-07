@@ -14,6 +14,7 @@ import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.ServersCache
 import com.v2ray.ang.dto.entities.SubscriptionCache
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.matchesPattern
@@ -176,6 +177,16 @@ class MainViewModel(
                 if (testRequests.completeCurrent(event.requestId)) resetTestStatus()
             }
 
+            is MainServiceEvent.CoreGroups -> {
+                // Only an open dialog takes the answer; a late reply after dismissal is dropped.
+                if (uiState.value.coreGroups != null) {
+                    viewModelScope.launch(defaultDispatcher) {
+                        val groups = parseCoreGroups(event.json)
+                        _uiState.update { state -> if (state.coreGroups != null) state.copy(coreGroups = groups) else state }
+                    }
+                }
+            }
+
             is MainServiceEvent.MeasureConfigCancelled -> {
                 if (testRequests.completeBulk(event.requestId) != null) {
                     cancelPendingTestResults()
@@ -290,8 +301,17 @@ class MainViewModel(
             is MainAction.SelectGroup -> subscriptionIdChanged(action.groupId)
             is MainAction.SelectServer -> updateSelectedGuid(action.guid)
             is MainAction.RemoveServer -> removeServerAndRefresh(action.guid)
+            is MainAction.SetProfileCore -> setProfileCore(action.guid, action.core)
+            MainAction.ShowCoreGroups -> {
+                _uiState.update { it.copy(coreGroups = emptyList()) }
+                dataSource.requestCoreGroups(selection = null)
+            }
+
+            MainAction.DismissCoreGroups -> _uiState.update { it.copy(coreGroups = null) }
+            is MainAction.SelectCoreGroupMember -> dataSource.requestCoreGroups(selection = action.group to action.member)
             is MainAction.Search -> filterConfig(action.query)
             is MainAction.ImportBatchConfig -> importBatchConfig(action.configText)
+            is MainAction.ImportConfigFile -> importConfigFile(action.content, action.fileName)
             MainAction.LocateHandled -> consumeLocateTarget()
             is MainAction.ShareQRCode -> {
                 val bitmap = dataSource.share2QRCode(action.guid)
@@ -339,7 +359,8 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 confirmRemove = dataSource.getConfirmRemove(),
-                doubleColumnDisplay = dataSource.getDoubleColumnDisplay()
+                doubleColumnDisplay = dataSource.getDoubleColumnDisplay(),
+                defaultCore = dataSource.getDefaultCore(),
             )
         }
     }
@@ -410,10 +431,12 @@ class MainViewModel(
         } else {
             emptyMap()
         }
+        val defaultCore = dataSource.getDefaultCore()
         return servers.map { server ->
             buildServerRowUiModel(
                 server = server,
-                subscriptionRemarks = subscriptionRemarks[server.profile.subscriptionId].orEmpty()
+                subscriptionRemarks = subscriptionRemarks[server.profile.subscriptionId].orEmpty(),
+                defaultCore = defaultCore,
             )
         }
     }
@@ -516,12 +539,19 @@ class MainViewModel(
 
     // ---------- Business actions (coroutine-based) ----------
     private fun importBatchConfig(configText: String) {
+        importConfigs { groupId -> dataSource.importBatchConfig(configText, groupId, true) }
+    }
+
+    private fun importConfigFile(content: String, fileName: String?) {
+        importConfigs { groupId -> dataSource.importConfigFile(content, groupId, fileName) }
+    }
+
+    /** Runs [runImport] into the selected group and reports how many configurations it added. */
+    private fun importConfigs(runImport: suspend (groupId: String) -> Pair<Int, Int>) {
         launchLoading {
             withContext(ioDispatcher) {
                 try {
-                    val (count, countSub) = dataSource.importBatchConfig(
-                        configText, uiState.value.selectedGroupId, true
-                    )
+                    val (count, countSub) = runImport(uiState.value.selectedGroupId)
                     when {
                         count > 0 -> {
                             toast(dataSource.getString(R.string.title_import_config_count, count))
@@ -794,6 +824,22 @@ class MainViewModel(
             dataSource.removeServer(guid)
             cacheMutex.withLock { groupDataCache.clear() }
             setupGroupTab(forceRefresh = true).join()
+        }
+    }
+
+    /**
+     * Stores the core [guid] runs on and refreshes its badge. The running profile is restarted so
+     * the new core (and, in VPN mode, its tun setup) takes over.
+     */
+    private fun setProfileCore(guid: String, core: CoreType?) {
+        viewModelScope.launch(ioDispatcher) {
+            if (!dataSource.setProfileCore(guid, core)) return@launch
+            cacheMutex.withLock { groupDataCache.clear() }
+            setupGroupTab(forceRefresh = true).join()
+            val state = uiState.value
+            if (state.isRunning && state.selectedGuid == guid) {
+                dataSource.sendMsg2Service(AppConfig.MSG_STATE_RESTART, "")
+            }
         }
     }
 

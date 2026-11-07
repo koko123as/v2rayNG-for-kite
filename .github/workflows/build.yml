@@ -9,6 +9,11 @@ on:
   push:
     branches:
       - master
+      - 'feat/**'
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: write
@@ -16,6 +21,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Only arm64-v8a is built (APK split, hev and libkite).
+      ABIS: arm64-v8a
 
     steps:
     - name: Checkout code
@@ -23,6 +31,13 @@ jobs:
       with:
         submodules: 'recursive'
         fetch-depth: '0'
+
+    - name: Read core pins
+      run: |
+        while IFS='=' read -r key value; do
+          case "$key" in ''|\#*) continue ;; esac
+          echo "$key=$value" >> "$GITHUB_ENV"
+        done < version.properties
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
@@ -37,6 +52,7 @@ jobs:
           --channel=0 \
           --install "ndk;30.0.16248370"
         echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
         sed -i '10i\
         \
             ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
@@ -46,39 +62,30 @@ jobs:
       uses: actions/cache/restore@v6
       with:
         path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ env.ABIS }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
 
     - name: Build libhevtun
       if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
       run: |
         bash compile-hevtun.sh
-    
+
     - name: Save libhevtun
       if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ env.ABIS }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
 
     - name: Copy libhevtun
       run: |
         cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-    - name: Fetch AndroidLibXrayLite tag
-      run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
-
-    - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
+    - name: Setup Go
+      uses: actions/setup-go@v5
       with:
-        repository: '2dust/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
+        # setup-go wants the bare version (1.27.3); go.mod pins the same one.
+        go-version-file: libkite/go.mod
+        cache-dependency-path: libkite/go.sum
 
     - name: Setup Java
       uses: actions/setup-java@v6.1.0
@@ -86,48 +93,109 @@ jobs:
         distribution: 'temurin'
         java-version: '21'
 
+    # libkite: the AndroidLibXrayLite libv2ray API (Xray) plus mihomo and
+    # sing-box in one gomobile AAR, built here instead of downloading
+    # 2dust/AndroidLibXrayLite's libv2ray.aar.
+    # The AAR only depends on libkite, the AndroidLibXrayLite gitlink and the
+    # pins; reuse it when none of them changed.
+    - name: Restore cached libkite AAR
+      id: cache-libkite-restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        key: libkite-${{ runner.os }}-${{ hashFiles('libkite/**', 'version.properties', '.git/modules/AndroidLibXrayLite/HEAD') }}
+
+    - name: Test libkite
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
+      run: |
+        bash libkite/build.sh test
+
+    - name: Verify libkite pins
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
+      run: |
+        python3 tools/verify_libkite.py
+        cat libkite/build/core-module-bumps.txt
+
+    - name: Build libkite AAR
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
+      run: |
+        go install golang.org/x/mobile/cmd/gomobile@${GOMOBILE_VERSION}
+        go install golang.org/x/mobile/cmd/gobind@${GOMOBILE_VERSION}
+        export PATH="$PATH:$(go env GOPATH)/bin"
+        gomobile init
+        bash libkite/build.sh
+        ls -l V2rayNG/app/libs/libv2ray.aar
+
+    - name: Save libkite AAR
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        key: ${{ steps.cache-libkite-restore.outputs.cache-primary-key }}
+
+    - name: Upload libkite report
+      uses: actions/upload-artifact@v7
+      if: ${{ always() }}
+      with:
+        name: libkite-report
+        path: libkite/build/core-module-bumps.txt
+        if-no-files-found: ignore
+
     - name: Decode Keystore
-      uses: timheuer/base64-to-file@v2.0.0
       id: android_keystore
+      if: ${{ github.ref == 'refs/heads/master' }}
+      uses: timheuer/base64-to-file@v2.0.0
       with:
         fileName: "android_keystore.jks"
         encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
 
-    - name: Build APK
+    - name: Unit tests
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
+        ./gradlew -PABI_FILTERS=arm64-v8a :app:testPlaystoreDebugUnitTest
+
+    - name: Build release APK
+      if: ${{ github.ref == 'refs/heads/master' }}
+      run: |
+        cd ${{ github.workspace }}/V2rayNG
         ./gradlew licenseFdroidReleaseReport
-        ./gradlew assembleRelease -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
-    
+        ./gradlew -PABI_FILTERS=arm64-v8a assembleRelease -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
+
+    # Branches have no release keystore: build the debug-signed Play Store
+    # variant instead.
+    - name: Build debug APK
+      if: ${{ github.ref != 'refs/heads/master' }}
+      run: |
+        cd ${{ github.workspace }}/V2rayNG
+        ./gradlew -PABI_FILTERS=arm64-v8a assemblePlaystoreDebug
+
+    - name: Check native libraries
+      run: |
+        apk=$(ls ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/*/*arm64-v8a*.apk | head -n1)
+        echo "APK: $apk"
+        unzip -l "$apk" | grep -E 'lib/arm64-v8a/(libgojni|libhev-socks5-tunnel|libhevsockstun)\.so'
+        for lib in libgojni.so libhev-socks5-tunnel.so libhevsockstun.so; do
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/$lib" || { echo "missing $lib"; exit 1; }
+        done
+        if unzip -l "$apk" | grep -E 'lib/(armeabi-v7a|x86|x86_64)/'; then
+          echo "unexpected ABI in APK"; exit 1
+        fi
+
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
-      if: ${{  success() }}
+      if: ${{ success() && github.ref == 'refs/heads/master' }}
       with:
         name: arm64-v8a
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*arm64-v8a*.apk
 
-    - name: Upload armeabi-v7a APK
+    - name: Upload arm64-v8a debug APK
       uses: actions/upload-artifact@v7
-      if: ${{  success() }}
+      if: ${{ success() && github.ref != 'refs/heads/master' }}
       with:
-        name: armeabi-v7a
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*armeabi-v7a*.apk
-
-    - name: Upload x86 APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: x86-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*x86*.apk
-
-    - name: Upload universal APK
-      uses: actions/upload-artifact@v7
-      if: ${{ success() }}
-      with:
-        name: universal-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*universal*.apk
+        name: arm64-v8a-debug
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*arm64-v8a*.apk
 
   sign-and-release:
     needs: build
@@ -138,6 +206,7 @@ jobs:
       - name: Download APK artifacts
         uses: actions/download-artifact@v8
         with:
+          name: arm64-v8a
           path: release
 
       - name: Sign APK files
@@ -159,4 +228,5 @@ jobs:
           file: release-files/*
           tag: ${{ inputs.release_tag }}
           file_glob: true
-          prerelease: true
+          # A full release, so the in-app update check (releases/latest) finds it.
+          prerelease: false

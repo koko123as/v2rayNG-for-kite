@@ -7,6 +7,7 @@ import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.root.RootProxyManager
@@ -55,8 +56,15 @@ class CoreRootService : Service(), ServiceControl {
             return START_NOT_STICKY
         }
 
+        // mihomo / sing-box listen themselves (redirect + DNS); Xray gets the hev tun.
+        val nativeCore = CoreServiceManager.getRunningCore()?.let { it != CoreType.XRAY } == true
         setupJob = CoroutineScope(Dispatchers.IO).launch {
-            if (!RootProxyManager.start(this@CoreRootService)) {
+            val installed = if (nativeCore) {
+                RootProxyManager.startNative(this@CoreRootService, AppConfig.PORT_ROOT_REDIR, AppConfig.PORT_ROOT_DNS)
+            } else {
+                RootProxyManager.start(this@CoreRootService)
+            }
+            if (!installed) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Root: failed to start root mode, stopping")
                 stopService()
             }

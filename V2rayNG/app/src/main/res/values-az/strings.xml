@@ -566,4 +566,25 @@
     <string name="sub_info_traffic" translatable="false">%1$s / %2$s</string>
     <string name="sub_info_unlimited">Limitsiz</string>
 
+    <string name="core_feature_xhttp">XHTTP nəqli</string>
+    <string name="core_feature_xhttp_extra">XHTTP əlavə ayarları</string>
+    <string name="core_feature_mkcp">mKCP nəqli</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">TCP HTTP başlıq maskalanması</string>
+    <string name="core_feature_mldsa65">REALITY ML-DSA-65 yoxlaması</string>
+    <string name="core_feature_vless_encryption">VLESS şifrələməsi</string>
+    <string name="core_feature_fragment">Fraqmentasiya (Fragment)</string>
+    <string name="core_feature_mux">Multipleksləmə (Mux)</string>
+    <string name="core_unsupported_features">%1$s %2$s işlədə bilmir. Bu profili Xray-ə keçirin.</string>
+    <string name="core_ignored_features">%2$s yalnız Xray-də işləyir, %1$s onları nəzərə almır.</string>
+
+    <string name="title_default_core">Standart nüvə</string>
+    <string name="title_profile_core">Nüvə</string>
+    <string name="core_follow_default">Standart (%1$s)</string>
+    <string name="core_auto_detect">Avtomatik aşkarlama</string>
+    <string name="summary_xray_only">Yalnız Xray tərəfindən istifadə olunur</string>
+
+    <string name="title_core_groups">Siyasət qrupları</string>
+    <string name="core_groups_empty">Siyasət qrupu yoxdur. mihomo və ya sing-box profili işləyərkən göstərilir.</string>
 </resources>

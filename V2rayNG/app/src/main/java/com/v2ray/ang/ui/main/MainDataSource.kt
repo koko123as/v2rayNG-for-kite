@@ -6,6 +6,7 @@ import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.ServerAffiliationInfo
 import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.enums.CoreType
 import kotlinx.coroutines.flow.Flow
 import java.io.Closeable
 
@@ -21,6 +22,7 @@ interface MainDataSource : Closeable {
     fun getConfirmRemove(): Boolean
     fun getDoubleColumnDisplay(): Boolean
     fun isGroupAllDisplayEnabled(): Boolean
+    fun getDefaultCore(): CoreType
 
     fun getString(resId: Int): String
     fun getString(resId: Int, vararg formatArgs: Any): String
@@ -35,6 +37,9 @@ interface MainDataSource : Closeable {
     fun encodeServerList(guids: List<String>, groupId: String)
 
     fun removeServer(guid: String)
+
+    /** Stores [core] as the core of [guid] (null follows the default); false when it is gone. */
+    fun setProfileCore(guid: String, core: CoreType?): Boolean
     fun removeAllServer(): Int
     fun removeInvalidServerByGuid(guid: String): Int
     fun removeInvalidServersInGroup(groupId: String): Int
@@ -49,6 +54,12 @@ interface MainDataSource : Closeable {
         updateUI: Boolean
     ): Pair<Int, Int>
 
+    suspend fun importConfigFile(
+        content: String,
+        subscriptionId: String,
+        fileName: String?
+    ): Pair<Int, Int>
+
     fun updateConfigViaSubAll(): SubscriptionUpdateResult
     fun updateConfigViaSub(subscriptionCache: SubscriptionCache): SubscriptionUpdateResult
 
@@ -60,6 +71,9 @@ interface MainDataSource : Closeable {
     fun sendMsg2TestService(msg: TestServiceMessage, requestId: String? = null)
     fun cancelAllPing()
     fun testCurrentServerRealPing(requestId: String)
+
+    /** Asks the daemon for its policy groups, after selecting [selection] (group to member) when given. */
+    fun requestCoreGroups(selection: Pair<String, String>?)
 
     fun syncSubscriptions()
     fun initAssets()

@@ -569,4 +569,25 @@
     <string name="sub_info_open_page">Открыть страницу подписки</string>
     <string name="sub_info_unlimited">Без ограничений</string>
 
+    <string name="core_feature_xhttp">транспорт XHTTP</string>
+    <string name="core_feature_xhttp_extra">дополнительные настройки XHTTP</string>
+    <string name="core_feature_mkcp">транспорт mKCP</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">маскировка HTTP-заголовком TCP</string>
+    <string name="core_feature_mldsa65">проверка REALITY ML-DSA-65</string>
+    <string name="core_feature_vless_encryption">шифрование VLESS</string>
+    <string name="core_feature_fragment">фрагментация (Fragment)</string>
+    <string name="core_feature_mux">мультиплексирование (Mux)</string>
+    <string name="core_unsupported_features">%1$s не поддерживает %2$s. Переключите этот профиль на Xray.</string>
+    <string name="core_ignored_features">%2$s работают только в Xray и игнорируются %1$s.</string>
+
+    <string name="title_default_core">Ядро по умолчанию</string>
+    <string name="title_profile_core">Ядро</string>
+    <string name="core_follow_default">По умолчанию (%1$s)</string>
+    <string name="core_auto_detect">Автоопределение</string>
+    <string name="summary_xray_only">Используется только Xray</string>
+
+    <string name="title_core_groups">Группы политик</string>
+    <string name="core_groups_empty">Нет групп политик. Они показываются, пока работает профиль mihomo или sing-box.</string>
 </resources>

@@ -563,4 +563,25 @@
     <string name="sub_info_open_page">開啟訂閱資訊頁面</string>
     <string name="sub_info_unlimited">無限制</string>
 
+    <string name="core_feature_xhttp">XHTTP 傳輸</string>
+    <string name="core_feature_xhttp_extra">XHTTP 額外設定</string>
+    <string name="core_feature_mkcp">mKCP 傳輸</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">瀏覽器轉發 (Browser Dialer)</string>
+    <string name="core_feature_tcp_http_header">TCP HTTP 偽裝</string>
+    <string name="core_feature_mldsa65">REALITY ML-DSA-65 驗證</string>
+    <string name="core_feature_vless_encryption">VLESS 加密</string>
+    <string name="core_feature_fragment">分片 (Fragment)</string>
+    <string name="core_feature_mux">多路複用 (Mux)</string>
+    <string name="core_unsupported_features">%1$s 不支援 %2$s，請將此設定檔切換到 Xray。</string>
+    <string name="core_ignored_features">%2$s 僅在 Xray 中生效，%1$s 將忽略。</string>
+
+    <string name="title_default_core">預設核心</string>
+    <string name="title_profile_core">核心</string>
+    <string name="core_follow_default">預設（%1$s）</string>
+    <string name="core_auto_detect">自動識別</string>
+    <string name="summary_xray_only">僅 Xray 使用</string>
+
+    <string name="title_core_groups">策略群組</string>
+    <string name="core_groups_empty">沒有策略群組。執行 mihomo 或 sing-box 設定時會在此列出。</string>
 </resources>

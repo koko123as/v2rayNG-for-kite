@@ -565,4 +565,25 @@
     <string name="sub_info_open_page">واز کردن صفحه اطلاعات اشتراک</string>
     <string name="sub_info_unlimited">بی‌حد</string>
 
+    <string name="core_feature_xhttp">انتقال XHTTP</string>
+    <string name="core_feature_xhttp_extra">تنظیمات اضافی XHTTP</string>
+    <string name="core_feature_mkcp">انتقال mKCP</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">مبهم‌سازی هدر HTTP د TCP</string>
+    <string name="core_feature_mldsa65">تأیید REALITY ML-DSA-65</string>
+    <string name="core_feature_vless_encryption">رمزنگاری VLESS</string>
+    <string name="core_feature_fragment">تیکه تیکه کردن (Fragment)</string>
+    <string name="core_feature_mux">مالتی‌پلکس (Mux)</string>
+    <string name="core_unsupported_features">%1$s نمی‌تونه %2$s ن اجرا کنه. ای پروفایل ن و Xray عوض کو.</string>
+    <string name="core_ignored_features">%2$s فقط د Xray کار مکنن و %1$s اونا ن نادیده مگره.</string>
+
+    <string name="title_default_core">هسته پیش‌فرض</string>
+    <string name="title_profile_core">هسته</string>
+    <string name="core_follow_default">پیش‌فرض (%1$s)</string>
+    <string name="core_auto_detect">تشخیص خودکار</string>
+    <string name="summary_xray_only">فقط Xray ازش استفاده مکنه</string>
+
+    <string name="title_core_groups">گروه‌های سیاست</string>
+    <string name="core_groups_empty">گروه سیاستی نی. وختی پروفایل mihomo یا sing-box کار مکنه نشون داده مشن.</string>
 </resources>

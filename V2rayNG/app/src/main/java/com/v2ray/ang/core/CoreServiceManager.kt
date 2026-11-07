@@ -12,19 +12,24 @@ import android.os.ParcelFileDescriptor
 import android.system.OsConstants
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.contracts.IDialerService
 import com.v2ray.ang.contracts.ServiceControl
+import com.v2ray.ang.contracts.TunOpener
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.OutboundTrafficStat
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.enums.BrowserDialerMode
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.extension.isNotNullEmpty
+import com.v2ray.ang.extension.toast
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SpeedtestManager
 import com.v2ray.ang.helper.MessageHelper
+import com.v2ray.ang.root.RootManager
 import com.v2ray.ang.service.DialerNativeService
 import com.v2ray.ang.service.DialerWebviewService
 import com.v2ray.ang.service.NetworkMonitor
@@ -41,6 +46,7 @@ import kotlinx.coroutines.withContext
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.ProcessFinder
+import java.io.File
 import java.lang.ref.SoftReference
 import java.net.InetSocketAddress
 
@@ -53,6 +59,11 @@ object CoreServiceManager {
     private var browserDialer: IDialerService? = null
     private var networkMonitor: NetworkMonitor? = null
     private val connectionTestScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Core of the running profile; null while stopped. Xray runs through [coreController]. */
+    @Volatile
+    private var currentCore: CoreType? = null
+    private var kitePlatform: KitePlatformBridge? = null
 
     @Volatile
     private var isReloading = false
@@ -69,13 +80,28 @@ object CoreServiceManager {
                 processFinder = XrayProcessFinder(service)
                 coreController.registerProcessFinder(processFinder)
             }
+            if (service != null && kitePlatform == null) {
+                // Socket protect, process lookup and the sing-box tun for all three cores.
+                kitePlatform = KitePlatformBridge(service).also { CoreNativeManager.registerKitePlatform(it) }
+            }
         }
 
     /**
      * Checks if the V2Ray service is running.
      * @return True if the service is running, false otherwise.
      */
-    fun isRunning() = coreController.isRunning
+    fun isRunning() = coreController.isRunning || CoreNativeManager.isKiteCoreRunning()
+
+    /** Core of the running profile, null while stopped. */
+    fun getRunningCore(): CoreType? = if (isRunning()) currentCore else null
+
+    /**
+     * Sets the VPN service that opens the tun interface for sing-box, null to remove it. Only the
+     * VPN service calls this; it owns the interface.
+     */
+    fun setTunOpener(opener: TunOpener?) {
+        kitePlatform?.tunOpener = opener
+    }
 
     /**
      * Gets the name of the currently running server.
@@ -129,6 +155,13 @@ object CoreServiceManager {
     private fun launchCore(service: Service, vpnInterface: ParcelFileDescriptor?, isReload: Boolean = false) {
         val guid = MmkvManager.getSelectServer() ?: error("No server selected")
         val config = MmkvManager.decodeServerConfig(guid) ?: error("Failed to decode server config")
+        val core = CoreTypeResolver.resolve(config)
+        if (core != CoreType.XRAY) {
+            launchKiteCore(service, guid, config, core, vpnInterface, isReload)
+            return
+        }
+        // Switching from mihomo/sing-box: release their listeners and tun before Xray binds.
+        CoreNativeManager.stopKiteCore()
 
         LogUtil.i(AppConfig.TAG, "StartCore-Manager: Starting core loop for ${config.remarks}")
         val result = CoreConfigManager.getV2rayConfig(service, guid)
@@ -138,6 +171,7 @@ object CoreServiceManager {
         }
 
         currentConfig = config
+        currentCore = CoreType.XRAY
         var tunFd = vpnInterface?.fd ?: 0
         val dialerMode = BrowserDialerMode.from(config.browserDialerMode)
         val dialerAddr = if (dialerMode != null) {
@@ -185,6 +219,91 @@ object CoreServiceManager {
     }
 
     /**
+     * Starts mihomo or sing-box for [config]. The core runs the traffic itself: mihomo on the
+     * VpnService descriptor, sing-box on the tun it opens through [setTunOpener], its own
+     * listeners in proxy-only and root mode.
+     */
+    @Throws(Exception::class)
+    private fun launchKiteCore(
+        service: Service,
+        guid: String,
+        config: ProfileItem,
+        core: CoreType,
+        vpnInterface: ParcelFileDescriptor?,
+        isReload: Boolean,
+    ) {
+        LogUtil.i(AppConfig.TAG, "StartCore-Manager: Starting ${core.value} for ${config.remarks}")
+        val result = CoreConfigManager.getCoreConfig(service, guid, core)
+        if (!result.status) {
+            error(result.errorMessage.ifBlank { "Failed to get ${core.displayName} config" })
+        }
+        // Switching from Xray: stop it synchronously so its ports are free before the new core binds.
+        if (coreController.isRunning) {
+            coreController.stopLoop()
+        }
+        currentConfig = config
+        currentCore = core
+
+        NotificationManager.showNotification(currentConfig)
+        kitePlatform?.pushNetworkState()
+        val spec = KiteRunOptions.build(kiteRunInput(service, core, vpnInterface))
+        CoreNativeManager.startKiteCore(core, result.content, KiteRunOptions.toCoreOptions(spec))
+        if (!isRunning()) {
+            error("Core failed to start")
+        }
+
+        val ignored = CoreTypeResolver.ignoredGlobalFeatures(
+            core,
+            fragmentEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_FRAGMENT_ENABLED, false),
+            muxEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_MUX_ENABLED, false),
+        )
+        if (ignored.isNotEmpty() && !isReload) {
+            val features = ignored.joinToString(", ") { service.getString(it.messageRes) }
+            val message = service.getString(R.string.core_ignored_features, core.displayName, features)
+            LogUtil.w(AppConfig.TAG, "StartCore-Manager: $message")
+            service.toast(message, true)
+        }
+
+        if (!isReload) {
+            MessageHelper.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
+        }
+        NotificationManager.startSpeedNotification()
+        LogUtil.i(AppConfig.TAG, "StartCore-Manager: ${core.value} started successfully")
+    }
+
+    private fun currentRunMode(): RunMode = when {
+        SettingsManager.isRootMode() -> RunMode.ROOT
+        SettingsManager.isVpnMode() -> RunMode.VPN
+        else -> RunMode.PROXY
+    }
+
+    private fun kiteRunInput(service: Service, core: CoreType, vpnInterface: ParcelFileDescriptor?): KiteRunOptions.Input {
+        val vpnConfig = SettingsManager.getCurrentVpnInterfaceAddressConfig()
+        return KiteRunOptions.Input(
+            mode = currentRunMode(),
+            core = core,
+            tunFd = vpnInterface?.fd ?: 0,
+            vpnIpv4 = vpnConfig.ipv4Client,
+            vpnIpv6 = vpnConfig.ipv6Client,
+            ipv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED),
+            mtu = SettingsManager.getVpnMtu(),
+            bypassLan = SettingsManager.routingRulesetsBypassLan(),
+            vpnDns = SettingsManager.getVpnDnsServers().firstOrNull { Utils.isPureIpAddress(it) }.orEmpty(),
+            localProxyEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true),
+            proxySharing = MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING),
+            socksPort = SettingsManager.getSocksPort(),
+            socksUsername = SettingsManager.getSocksUsername(),
+            socksPassword = SettingsManager.getSocksPassword(),
+            rootLanSharing = MmkvManager.decodeSettingsBool(AppConfig.PREF_ROOT_LAN_SHARING) && RootManager.cachedRoot(),
+            homeDir = File(service.filesDir, "cores/${core.value}").absolutePath,
+            assetDir = Utils.userAssetPath(service),
+            logLevel = MmkvManager.decodeSettingsString(AppConfig.PREF_LOGLEVEL) ?: "warning",
+            systemDns = kitePlatform?.systemDnsServers().orEmpty(),
+            sniffing = MmkvManager.decodeSettingsBool(AppConfig.PREF_SNIFFING_ENABLED, true),
+        )
+    }
+
+    /**
      * Stops the V2Ray core service.
      * Unregisters broadcast receivers, stops notifications, and shuts down plugins.
      * @return True if the core was stopped successfully, false otherwise.
@@ -197,7 +316,7 @@ object CoreServiceManager {
         networkMonitor = null
         currentVpnInterface = null
 
-        if (isRunning()) {
+        if (coreController.isRunning) {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     coreController.stopLoop()
@@ -206,6 +325,12 @@ object CoreServiceManager {
                 }
             }
         }
+        if (CoreNativeManager.isKiteCoreRunning()) {
+            // Synchronous: the listeners and the dup of the tun descriptor must be released
+            // before the service closes the VPN interface or another core binds the ports.
+            CoreNativeManager.stopKiteCore()
+        }
+        currentCore = null
 
         // Close existing browser dialer
         CoreNativeManager.reconcileBrowserDialer("")
@@ -238,7 +363,10 @@ object CoreServiceManager {
         val connectivity = service.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
         networkMonitor = NetworkMonitor(
             connectivity = connectivity,
-            onUnderlyingNetworksChanged = { networks -> serviceControl?.get()?.setUnderlyingNetworks(networks) },
+            onUnderlyingNetworksChanged = { networks ->
+                serviceControl?.get()?.setUnderlyingNetworks(networks)
+                if (CoreNativeManager.isKiteCoreRunning()) kitePlatform?.pushNetworkState()
+            },
             onHandover = { reloadCore() },
         ).also { it.register() }
     }
@@ -256,6 +384,12 @@ object CoreServiceManager {
         if (isReloading) return false
         val service = getService() ?: return false
         if (!isRunning()) return false
+        if (CoreNativeManager.isKiteCoreRunning()) {
+            // mihomo and sing-box follow the network themselves (default interface and DNS
+            // pushed by pushNetworkState); restarting sing-box would also rebuild the VPN.
+            kitePlatform?.pushNetworkState()
+            return true
+        }
 
         return try {
             val tunFd = currentVpnInterface
@@ -287,7 +421,11 @@ object CoreServiceManager {
         // The stats manager is gone once the core stops, querying it then reaches into freed state.
         if (!isRunning()) return emptyList()
 
-        val payload = coreController.queryAllOutboundTrafficStats()
+        val payload = if (CoreNativeManager.isKiteCoreRunning()) {
+            CoreNativeManager.queryKiteTrafficStats()
+        } else {
+            coreController.queryAllOutboundTrafficStats()
+        }
 
         val result = ArrayList<OutboundTrafficStat>()
 
@@ -329,7 +467,7 @@ object CoreServiceManager {
             var errorStr = ""
 
             try {
-                time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
+                time = measureRunningDelay(SettingsManager.getDelayTestUrl())
             } catch (e: Exception) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
                 errorStr = e.message?.substringAfter("\":").orEmpty()
@@ -337,7 +475,7 @@ object CoreServiceManager {
             if (time == -1L) {
                 ensureActive()
                 try {
-                    time = coreController.measureDelay(SettingsManager.getDelayTestUrl(true))
+                    time = measureRunningDelay(SettingsManager.getDelayTestUrl(true))
                 } catch (e: Exception) {
                     LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
                     errorStr = e.message?.substringAfter("\":").orEmpty()
@@ -363,6 +501,35 @@ object CoreServiceManager {
             if (cause is CancellationException) {
                 MessageHelper.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_CANCEL, "", requestId)
             }
+        }
+    }
+
+    /**
+     * Answers the UI with the policy groups of the running mihomo / sing-box ("[]" for Xray),
+     * after selecting [selection] (group to member) when given. Native calls run off the main thread.
+     */
+    private fun sendCoreGroups(service: Service, selection: Pair<String, String>?) {
+        connectionTestScope.launch {
+            var groups = "[]"
+            try {
+                if (CoreNativeManager.isKiteCoreRunning()) {
+                    selection?.let { (group, member) -> CoreNativeManager.selectKiteOutbound(group, member) }
+                    groups = CoreNativeManager.getKiteGroups()
+                }
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Manager: policy group request failed (${currentCore?.value})", e)
+                groups = runCatching { CoreNativeManager.getKiteGroups() }.getOrDefault("[]")
+            }
+            MessageHelper.sendMsg2UI(service, AppConfig.MSG_CORE_GROUPS_RESULT, groups)
+        }
+    }
+
+    /** Delay through whichever core runs; mihomo follows its rules, sing-box its "proxy" outbound. */
+    private fun measureRunningDelay(url: String): Long {
+        return if (CoreNativeManager.isKiteCoreRunning()) {
+            CoreNativeManager.measureKiteDelay(url, 12_000)
+        } else {
+            coreController.measureDelay(url)
         }
     }
 
@@ -502,6 +669,17 @@ object CoreServiceManager {
                 AppConfig.MSG_MEASURE_DELAY -> {
                     if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
                     measureV2rayDelay(intent.getStringExtra("content").orEmpty())
+                }
+
+                AppConfig.MSG_CORE_GROUPS -> {
+                    if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
+                    sendCoreGroups(serviceControl.getService(), selection = null)
+                }
+
+                AppConfig.MSG_CORE_GROUP_SELECT -> {
+                    if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
+                    val parts = intent.getStringExtra("content").orEmpty().split("\n", limit = 2)
+                    sendCoreGroups(serviceControl.getService(), selection = parts.getOrElse(0) { "" } to parts.getOrElse(1) { "" })
                 }
             }
 

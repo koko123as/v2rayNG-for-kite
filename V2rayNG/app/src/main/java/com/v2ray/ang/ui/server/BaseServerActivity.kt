@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
+import com.v2ray.ang.core.CoreTypeResolver
 import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.extension.toast
@@ -67,10 +69,14 @@ abstract class BaseServerActivity : BaseComponentActivity() {
 
     protected lateinit var initialConfig: ProfileItem
 
+    /** Global default core, shown on the "Default" option of the core field. */
+    protected lateinit var defaultCore: CoreType
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val existingConfig = MmkvManager.decodeServerConfig(editGuid)
         initialConfig = existingConfig ?: ProfileItem.create(serverConfigType)
+        defaultCore = CoreTypeResolver.globalDefault()
     }
 
     @Composable
@@ -123,7 +129,29 @@ abstract class BaseServerActivity : BaseComponentActivity() {
                 keyboardType = KeyboardType.Number,
                 isError = state.isPortError
             )
+            CommonCoreField(state)
         }
+    }
+
+    /**
+     * The core that runs this profile: the global default or a fixed core. Stored in
+     * [ProfileItem.coreType] when the profile is saved, the same value the server menu's "Core"
+     * entry sets.
+     */
+    @Composable
+    protected fun CommonCoreField(state: ServerUiState) {
+        val options: List<CoreType?> = listOf<CoreType?>(null) + CoreType.entries
+        val defaultLabel = stringResource(R.string.core_follow_default, defaultCore.displayName)
+        val labels = options.map { it?.displayName ?: defaultLabel }
+        FormDropdownField(
+            stringResource(R.string.title_profile_core),
+            CoreType.fromValue(state.coreType)?.displayName ?: defaultLabel,
+            labels,
+            { label ->
+                val index = labels.indexOf(label)
+                if (index >= 0) state.coreType = options[index]?.value.orEmpty()
+            }
+        )
     }
 
     @Composable

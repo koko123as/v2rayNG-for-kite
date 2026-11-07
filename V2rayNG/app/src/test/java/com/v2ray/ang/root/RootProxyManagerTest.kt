@@ -50,4 +50,77 @@ class RootProxyManagerTest {
 
         assertEquals("'user\nHEVCFG\ntouch /data/local/tmp/injected'", credential.toSingleQuotedYamlScalar())
     }
+
+    private val nativeSetup = RootProxyManager.NativeSetup(
+        appUid = 10123,
+        perAppEnabled = false,
+        bypassApps = false,
+        selectedUids = emptyList(),
+        ipv6 = false,
+        lanShare = false,
+        captureDeviceTraffic = true,
+        redirPort = 10851,
+        dnsPort = 10852,
+        corePid = 4242,
+        oomGuardPidFile = "/data/oom.pid",
+    )
+
+    @Test
+    fun `native root mode redirects TCP and DNS and keeps the core direct`() {
+        val script = RootProxyManager.buildNativeSetup(nativeSetup)
+        val nat = script.lines().filter { it.startsWith("iptables -t nat -A CORE_NAT ") }
+
+        assertEquals("iptables -t nat -A CORE_NAT -m owner --uid-owner 10123 -j RETURN", nat.first())
+        val dnsIndex = nat.indexOfFirst { it.contains("--dport 53 -j REDIRECT --to-ports 10852") }
+        val lanIndex = nat.indexOfFirst { it.contains("-d 192.168.0.0/16 -j RETURN") }
+        assertTrue(dnsIndex in 1 until lanIndex, "DNS must be redirected before the LAN bypass")
+        assertEquals("iptables -t nat -A CORE_NAT -p tcp -j REDIRECT --to-ports 10851", nat.last())
+        assertTrue(script.contains("iptables -t nat -A OUTPUT -j CORE_NAT"))
+        assertTrue(script.contains("iptables -t filter -A CORE_QUIC -p udp --dport 443 -j REJECT"))
+        // No tun, no helper and no TPROXY for the native cores.
+        assertFalse(script.contains("TPROXY"))
+        assertFalse(script.contains("hevsockstun"))
+        assertTrue(script.contains("/proc/4242/oom_score_adj"))
+    }
+
+    @Test
+    fun `native root mode blackholes IPv6 when it is disabled and redirects it when enabled`() {
+        val v4only = RootProxyManager.buildNativeSetup(nativeSetup)
+        assertTrue(v4only.contains("ip6tables -t filter -A OUTPUT -j ${com.v2ray.ang.AppConfig.ROOT_V6_CHAIN}"))
+        assertFalse(v4only.contains("ip6tables -t nat -A CORE_NAT"))
+
+        val v6 = RootProxyManager.buildNativeSetup(nativeSetup.copy(ipv6 = true))
+        assertTrue(v6.contains("ip6tables -t nat -A CORE_NAT -p tcp -j REDIRECT --to-ports 10851"))
+        assertTrue(v6.contains("ip6tables -t nat -A CORE_NAT -d fc00::/7 -j RETURN"))
+    }
+
+    @Test
+    fun `native per-app proxy mode only redirects the selected apps and fails closed`() {
+        val selected = RootProxyManager.buildNativeSetup(nativeSetup.copy(perAppEnabled = true, selectedUids = listOf("10200")))
+        assertTrue(selected.contains("iptables -t nat -A CORE_NAT -m owner --uid-owner 10200 -p tcp -j REDIRECT --to-ports 10851"))
+        assertFalse(selected.contains("iptables -t nat -A CORE_NAT -p tcp -j REDIRECT"))
+
+        val none = RootProxyManager.buildNativeSetup(nativeSetup.copy(perAppEnabled = true))
+        assertFalse(none.contains("-p tcp -j REDIRECT --to-ports 10851"))
+    }
+
+    @Test
+    fun `native bypass mode returns the selected apps before redirecting the rest`() {
+        val script = RootProxyManager.buildNativeSetup(nativeSetup.copy(perAppEnabled = true, bypassApps = true, selectedUids = listOf("10300")))
+        val nat = script.lines().filter { it.startsWith("iptables -t nat -A CORE_NAT ") }
+
+        assertEquals("iptables -t nat -A CORE_NAT -m owner --uid-owner 10300 -j RETURN", nat[1])
+        assertEquals("iptables -t nat -A CORE_NAT -p tcp -j REDIRECT --to-ports 10851", nat.last())
+    }
+
+    @Test
+    fun `native LAN sharing without device capture only touches forwarded clients`() {
+        val script = RootProxyManager.buildNativeSetup(nativeSetup.copy(captureDeviceTraffic = false, lanShare = true))
+
+        assertFalse(script.contains("-A OUTPUT -j CORE_NAT"))
+        assertTrue(script.contains("iptables -t nat -A CORE_NAT_PRE -s 192.168.0.0/16 -p tcp -j REDIRECT --to-ports 10851"))
+        assertTrue(script.contains("iptables -t nat -A CORE_NAT_PRE -s 10.0.0.0/8 -p udp --dport 53 -j REDIRECT --to-ports 10852"))
+        assertTrue(script.contains("iptables -t nat -A CORE_NAT_PRE -m addrtype --dst-type LOCAL -j RETURN"))
+        assertTrue(script.contains("ip6tables -A CORE6_FWD -j REJECT --reject-with icmp6-no-route"))
+    }
 }

@@ -31,6 +31,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
@@ -64,7 +65,13 @@ fun AboutScreen(
     var showOssDialog by remember { mutableStateOf(false) }
 
     val libVersion = CoreNativeManager.getLibVersion()
-    val versionText = "v${BuildConfig.VERSION_NAME} ($libVersion)"
+    // The embedded mihomo and sing-box versions follow the Xray line.
+    val kiteVersions = CoreNativeManager.getCoreVersions()
+        .filterKeys { it != CoreType.XRAY }
+        .map { (core, version) -> "${core.displayName} ${version.removePrefix("v")}" }
+        .joinToString(" · ")
+    val versionText = "v${BuildConfig.VERSION_NAME} ($libVersion)" +
+        if (kiteVersions.isEmpty()) "" else "\n$kiteVersions"
     val appIdText = BuildConfig.APPLICATION_ID
 
     Scaffold(
@@ -101,11 +108,6 @@ fun AboutScreen(
                 icon = painterResource(R.drawable.ic_feedback_24dp),
                 title = stringResource(R.string.title_pref_feedback),
                 onClick = { Utils.openUri(context, AppConfig.APP_ISSUES_URL) }
-            )
-            SettingsMenuItem(
-                icon = painterResource(R.drawable.ic_telegram_24dp),
-                title = stringResource(R.string.title_tg_channel),
-                onClick = { Utils.openUri(context, AppConfig.TG_CHANNEL_URL) }
             )
             SettingsMenuItem(
                 icon = painterResource(R.drawable.ic_privacy_24dp),

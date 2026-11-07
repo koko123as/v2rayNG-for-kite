@@ -563,4 +563,25 @@
     <string name="sub_info_open_page">Mở trang thông tin đăng ký</string>
     <string name="sub_info_unlimited">Không giới hạn</string>
 
+    <string name="core_feature_xhttp">Giao thức truyền XHTTP</string>
+    <string name="core_feature_xhttp_extra">Cài đặt bổ sung XHTTP</string>
+    <string name="core_feature_mkcp">Giao thức truyền mKCP</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">Ngụy trang tiêu đề HTTP của TCP</string>
+    <string name="core_feature_mldsa65">Xác minh REALITY ML-DSA-65</string>
+    <string name="core_feature_vless_encryption">Mã hóa VLESS</string>
+    <string name="core_feature_fragment">Phân mảnh (Fragment)</string>
+    <string name="core_feature_mux">Ghép kênh (Mux)</string>
+    <string name="core_unsupported_features">%1$s không chạy được %2$s. Hãy chuyển cấu hình này sang Xray.</string>
+    <string name="core_ignored_features">%2$s chỉ hoạt động với Xray và bị %1$s bỏ qua.</string>
+
+    <string name="title_default_core">Lõi mặc định</string>
+    <string name="title_profile_core">Lõi</string>
+    <string name="core_follow_default">Mặc định (%1$s)</string>
+    <string name="core_auto_detect">Tự động nhận diện</string>
+    <string name="summary_xray_only">Chỉ Xray sử dụng</string>
+
+    <string name="title_core_groups">Nhóm chính sách</string>
+    <string name="core_groups_empty">Không có nhóm chính sách. Chúng hiển thị khi hồ sơ mihomo hoặc sing-box đang chạy.</string>
 </resources>

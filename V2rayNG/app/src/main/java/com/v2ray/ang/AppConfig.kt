@@ -89,6 +89,8 @@ object AppConfig {
     const val PREF_AUTO_REMOVE_INVALID_AFTER_TEST = "pref_auto_remove_invalid_after_test"
     const val PREF_AUTO_SORT_AFTER_TEST = "pref_auto_sort_after_test"
     const val PREF_REAL_PING_CONCURRENCY = "pref_real_ping_concurrency"
+    /** Global default core (CoreType.value); a profile's own coreType overrides it. */
+    const val PREF_CORE_TYPE = "pref_core_type"
 
     /** Cache keys. */
     const val CACHE_SUBSCRIPTION_ID = "cache_subscription_id"
@@ -127,13 +129,15 @@ object AppConfig {
     const val GITHUB_RAW_URL = "https://raw.githubusercontent.com"
     const val GITHUB_DOWNLOAD_URL = "$GITHUB_URL/%s/releases/latest/download"
     const val ANDROID_PACKAGE_NAME_LIST_URL = "$GITHUB_RAW_URL/2dust/androidpackagenamelist/master/proxy.txt"
-    const val APP_URL = "$GITHUB_URL/2dust/v2rayNG"
-    const val APP_API_URL = "https://api.github.com/repos/2dust/v2rayNG/releases"
-    const val APP_ISSUES_URL = "$APP_URL/issues"
-    const val APP_WIKI_MODE = "$APP_URL/wiki/Mode"
+    /** This fork: source code link and update check. */
+    const val APP_URL = "$GITHUB_URL/koko123as/v2rayNG-for-kite"
+    const val APP_API_URL = "https://api.github.com/repos/koko123as/v2rayNG-for-kite/releases"
+
+    /** Upstream v2rayNG, for its issue tracker and wiki (the fork has neither). */
+    const val UPSTREAM_URL = "$GITHUB_URL/2dust/v2rayNG"
+    const val APP_ISSUES_URL = "$UPSTREAM_URL/issues"
+    const val APP_WIKI_MODE = "$UPSTREAM_URL/wiki/Mode"
     const val APP_PRIVACY_POLICY = "$GITHUB_RAW_URL/2dust/v2rayNG/master/CR.md"
-    const val APP_PROMOTION_URL = "aHR0cHM6Ly85LjIzNDQ1Ni54eXovYWJjLmh0bWw="
-    const val TG_CHANNEL_URL = "https://t.me/github_2dust"
     const val DELAY_TEST_URL = "https://www.gstatic.com/generate_204"
     const val DELAY_TEST_URL2 = "https://www.google.com/generate_204"
     const val OBSERVATORY_LEAST_PING_INTERVAL = "3m"
@@ -163,6 +167,10 @@ object AppConfig {
     /** Ports and addresses for various services. */
     const val PORT_LOCAL_DNS = "10853"
     const val PORT_SOCKS = "10808"
+    /** Root mode listeners of mihomo / sing-box (TPROXY, REDIRECT, DNS). */
+    const val PORT_ROOT_TPROXY = 10850
+    const val PORT_ROOT_REDIR = 10851
+    const val PORT_ROOT_DNS = 10852
     const val WIREGUARD_LOCAL_ADDRESS_V4 = "172.16.0.2/32"
     const val WIREGUARD_LOCAL_ADDRESS_V6 = "2606:4700:110:8f81:d551:a0:532e:a2b3/128"
     const val WIREGUARD_LOCAL_MTU = "1420"
@@ -198,6 +206,12 @@ object AppConfig {
 
     const val MSG_SUB_UPDATE_START = 8
     const val MSG_SUB_UPDATE_CANCEL = 81
+
+    /** Policy groups of the running mihomo / sing-box, answered with [MSG_CORE_GROUPS_RESULT] (JSON). */
+    const val MSG_CORE_GROUPS = 9
+    const val MSG_CORE_GROUPS_RESULT = 91
+    /** Content "group\nmember": selects a member of a selector group, answered like [MSG_CORE_GROUPS]. */
+    const val MSG_CORE_GROUP_SELECT = 92
 
     /** Notification channel IDs and names. */
     // Use a new ID because Android does not let an app raise an existing channel's importance.
@@ -244,6 +258,9 @@ object AppConfig {
     const val ROOT_V6_CHAIN = "CORE6_FILTER"       // ip6tables filter/OUTPUT chain: blackhole native IPv6 when it isn't tunneled
     const val ROOT_V6_FWD_CHAIN = "CORE6_FWD" // ip6tables FORWARD chain: route or reject tethered clients' native IPv6
     const val ROOT_V6_PRE_CHAIN = "CORE6_PRE" // ip6tables mangle/PREROUTING chain: mark forwarded clients' IPv6 into the tun
+    const val ROOT_NAT_CHAIN = "CORE_NAT"           // nat/OUTPUT chain: REDIRECT to the mihomo/sing-box listeners (root mode)
+    const val ROOT_NAT_PRE_CHAIN = "CORE_NAT_PRE"   // nat/PREROUTING chain: REDIRECT tethered clients to the mihomo/sing-box listeners
+    const val ROOT_QUIC_CHAIN = "CORE_QUIC"         // filter/OUTPUT chain: reject QUIC of captured apps (mihomo/sing-box root mode)
     const val ROOT_LAN_DNS = "1.1.1.1"          // fallback resolver for tethered clients when no plain-IPv4 DNS is configured
     const val ROOT_OOM_SCORE = "-1000"          // oom_score_adj that makes the LMK never kill us
 

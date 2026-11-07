@@ -1,5 +1,7 @@
 package com.v2ray.ang.ui.main
 
+import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.enums.EConfigType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -19,7 +21,7 @@ class MainImportMenuTest {
     fun regularMoreMenuContainsEveryActionInDisplayOrder() {
         assertEquals(
             ServerMenuAction.entries,
-            serverMenuActions(isComplexProfile = false, includeManagementActions = true),
+            serverMenuActions(isComplexProfile = false, includeManagementActions = true, supportsCoreSelection = true),
         )
     }
 
@@ -39,5 +41,37 @@ class MainImportMenuTest {
             ServerMenuAction.Delete,
         )
         assertEquals(expected, serverMenuActions(isComplexProfile = true, includeManagementActions = true))
+    }
+
+    @Test
+    fun coreSelectionIsHiddenUnlessSupported() {
+        assertEquals(
+            false,
+            serverMenuActions(isComplexProfile = false, includeManagementActions = true).contains(ServerMenuAction.SelectCore),
+        )
+    }
+
+    @Test
+    fun coreSelectionIsInTheShareMenuOfRegularAndComplexProfiles() {
+        assertEquals(
+            listOf(
+                ServerMenuAction.ShareQRCode,
+                ServerMenuAction.ShareClipboard,
+                ServerMenuAction.ShareFullContent,
+                ServerMenuAction.SelectCore,
+            ),
+            serverMenuActions(isComplexProfile = false, includeManagementActions = false, supportsCoreSelection = true),
+        )
+        assertEquals(
+            listOf(ServerMenuAction.ShareFullContent, ServerMenuAction.SelectCore),
+            serverMenuActions(isComplexProfile = true, includeManagementActions = false, supportsCoreSelection = true),
+        )
+    }
+
+    @Test
+    fun nativeConfigurationsCannotPickACore() {
+        assertEquals(false, supportsCoreSelection(ProfileItem.create(EConfigType.CUSTOM)))
+        assertEquals(true, supportsCoreSelection(ProfileItem.create(EConfigType.VLESS)))
+        assertEquals(true, supportsCoreSelection(ProfileItem.create(EConfigType.POLICYGROUP)))
     }
 }

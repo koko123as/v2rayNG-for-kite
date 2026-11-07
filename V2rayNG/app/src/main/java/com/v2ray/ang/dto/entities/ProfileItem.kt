@@ -74,6 +74,12 @@ data class ProfileItem(
     var proxyChainProfiles: String? = null,
 
     var browserDialerMode: String? = null,
+
+    /**
+     * Core that runs this profile (CoreType.value). Null follows the global default; native
+     * configurations (CUSTOM) store the core they were written for.
+     */
+    var coreType: String? = null,
 ) {
 
     companion object {

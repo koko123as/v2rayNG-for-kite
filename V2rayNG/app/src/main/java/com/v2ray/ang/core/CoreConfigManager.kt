@@ -5,6 +5,7 @@ import android.text.TextUtils
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.dto.ConfigResult
 import com.v2ray.ang.dto.CoreConfigContext
 import com.v2ray.ang.dto.V2rayConfig
@@ -12,6 +13,7 @@ import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.RulesetItem
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.handler.MmkvManager
@@ -49,6 +51,59 @@ object CoreConfigManager {
                 status = false,
                 guid = guid,
                 errorMessage = "Failed to get V2ray config: ${e.message ?: e.javaClass.simpleName}"
+            )
+        }
+    }
+
+    /**
+     * Build the runtime configuration of [guid] for [core].
+     *
+     * Xray uses [getV2rayConfig] / [getV2rayConfig4Speedtest] unchanged. mihomo and sing-box get
+     * their configuration translated from the same analyzed plan ([CoreConfigContextBuilder]) by
+     * [MihomoConfigBuilder] / [SingboxConfigBuilder]; a native configuration (CUSTOM) of that core
+     * is returned as written, libkite replaces its inbounds for the run mode.
+     */
+    fun getCoreConfig(context: Context, guid: String, core: CoreType, forSpeedtest: Boolean = false): ConfigResult {
+        if (core == CoreType.XRAY) {
+            return if (forSpeedtest) getV2rayConfig4Speedtest(context, guid) else getV2rayConfig(context, guid)
+        }
+        try {
+            val configContext = CoreConfigContextBuilder.build(context, guid)
+                ?: return ConfigResult(status = false, guid = guid, errorMessage = "Failed to build config context")
+            if (configContext.isCustom) {
+                val raw = MmkvManager.decodeServerRaw(guid)
+                    ?: return ConfigResult(status = false, guid = guid, errorMessage = "Failed to build config context, config is empty")
+                return ConfigResult(status = true, guid = guid, content = raw)
+            }
+            val primary = configContext.resolvedOutbounds.firstOrNull()
+                ?: return ConfigResult(status = false, guid = guid, errorMessage = "Failed to build config context")
+            val unsupported = primary.resolvedProfiles
+                .flatMap { CoreTypeResolver.unsupportedFeatures(it, core) }
+                .distinct()
+            if (unsupported.isNotEmpty() && primary.resolvedType != CoreResolvedType.POLICYGROUP) {
+                val features = unsupported.joinToString(", ") { context.getString(it.messageRes) }
+                return ConfigResult(
+                    status = false,
+                    guid = guid,
+                    errorMessage = context.getString(R.string.core_unsupported_features, core.displayName, features)
+                )
+            }
+            val settings = KiteConfigSettings.fromPreferences()
+            val (content, skipped) = when (core) {
+                CoreType.MIHOMO -> MihomoConfigBuilder.build(configContext, settings, forSpeedtest).let { it.content to it.skipped }
+                CoreType.SING_BOX -> SingboxConfigBuilder.build(configContext, settings, forSpeedtest).let { it.content to it.skipped }
+                CoreType.XRAY -> error("unreachable")
+            }
+            if (skipped.isNotEmpty()) {
+                LogUtil.w(AppConfig.TAG, "${core.value}: skipped ${skipped.size} node(s) or rule(s) it cannot run")
+            }
+            return ConfigResult(status = true, guid = guid, content = content)
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to get ${core.value} config", e)
+            return ConfigResult(
+                status = false,
+                guid = guid,
+                errorMessage = "Failed to get ${core.displayName} config: ${e.message ?: e.javaClass.simpleName}"
             )
         }
     }
