@@ -3,7 +3,9 @@ package com.v2ray.ang.service
 import android.content.Context
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.CoreTypeResolver
 import com.v2ray.ang.dto.RealPingEvent
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
@@ -20,6 +22,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -123,13 +126,30 @@ class RealPingWorkerService(
             }
         }
 
-        val configResult = CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
+        // Each profile is tested on the core that would run it.
+        val core = CoreTypeResolver.resolve(config)
+        val configResult = CoreConfigManager.getCoreConfig(context, guid, core, forSpeedtest = true)
         if (!configResult.status) {
             return retFailure
         }
         return RealPingExecutionLimiter.run(config.configType) {
-            CoreNativeManager.measureOutboundDelay(configResult.content, SettingsManager.getDelayTestUrl())
+            if (core == CoreType.XRAY) {
+                CoreNativeManager.measureOutboundDelay(configResult.content, SettingsManager.getDelayTestUrl())
+            } else {
+                CoreNativeManager.measureKiteOutboundDelay(
+                    core,
+                    configResult.content,
+                    SettingsManager.getDelayTestUrl(),
+                    REAL_PING_TIMEOUT_MS,
+                    File(context.cacheDir, "speedtest/${core.value}").absolutePath,
+                )
+            }
         }
+    }
+
+    private companion object {
+        /** Offline mihomo / sing-box delay test timeout. */
+        const val REAL_PING_TIMEOUT_MS = 10_000
     }
 
     private fun startTcping(guid: String): Long {
