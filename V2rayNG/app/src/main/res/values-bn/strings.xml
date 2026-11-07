@@ -581,6 +581,7 @@
     <string name="title_default_core">ডিফল্ট কোর</string>
     <string name="title_profile_core">কোর</string>
     <string name="core_follow_default">ডিফল্ট (%1$s)</string>
+    <string name="core_auto_detect">স্বয়ংক্রিয় শনাক্তকরণ</string>
     <string name="summary_xray_only">শুধু Xray ব্যবহার করে</string>
 
     <string name="title_core_groups">পলিসি গ্রুপ</string>

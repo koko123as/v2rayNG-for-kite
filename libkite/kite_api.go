@@ -216,8 +216,10 @@ func resolveMihomoGroupMember(proxy mihomoConstant.Proxy, depth int) mihomoConst
 
 func measureSingBoxOffline(ctx context.Context, content string, target string, url string, homeDir string) (int64, error) {
 	var root map[string]any
-	if err := json.Unmarshal([]byte(content), &root); err != nil {
-		return -1, err
+	// A profile imported or edited as a file may be JSONC (comments, trailing
+	// commas, BOM), as the running path accepts it.
+	if err := json.Unmarshal([]byte(normalizeJSONC(content)), &root); err != nil {
+		return -1, fmt.Errorf("decode sing-box config: %w", err)
 	}
 	root["inbounds"] = []any{}
 	delete(root, "experimental")

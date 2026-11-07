@@ -269,7 +269,7 @@ func startSingBox(content string, options *CoreOptions) error {
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	platform := &singBoxPlatform{vpn: options.Mode == ModeVPN}
+	platform := &singBoxPlatform{vpn: options.Mode == ModeVPN, primary: true}
 	ctx = service.ContextWith[adapter.PlatformInterface](ctx, platform)
 	instance, err := box.New(box.Options{
 		Context:           ctx,
@@ -348,8 +348,13 @@ func (singBoxLogWriter) WriteMessage(level log.Level, message string) {
 
 var _ adapter.PlatformInterface = (*singBoxPlatform)(nil)
 
+// singBoxPlatform is the Android platform of one sing-box instance. primary
+// marks the running instance: only its interface monitor takes the
+// default-interface updates from Android, an offline delay test instance must
+// not take them away from it.
 type singBoxPlatform struct {
 	vpn            bool
+	primary        bool
 	networkManager adapter.NetworkManager
 	access         sync.Mutex
 	myTunName      string
@@ -600,9 +605,11 @@ type singBoxInterfaceMonitor struct {
 }
 
 func (m *singBoxInterfaceMonitor) Start() error {
-	singBoxAccess.Lock()
-	singBoxMonitor = m
-	singBoxAccess.Unlock()
+	if m.platform.primary {
+		singBoxAccess.Lock()
+		singBoxMonitor = m
+		singBoxAccess.Unlock()
+	}
 	if name, index, ok := lastDefaultInterface(); ok {
 		m.update(name, index)
 	}

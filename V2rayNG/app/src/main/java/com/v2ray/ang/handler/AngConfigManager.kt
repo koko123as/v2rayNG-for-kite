@@ -220,9 +220,11 @@ object AngConfigManager {
     }
 
     /**
-     * Imports the content of a file the user picked. A full mihomo (Clash) YAML or sing-box JSON
-     * (JSONC accepted) is stored whole as one profile of that core, named after [fileName];
-     * anything else is imported like pasted text.
+     * Imports the content of a file the user picked. A mihomo (Clash) YAML or sing-box JSON (JSONC
+     * accepted) is split into its nodes, one profile each, like pasted text. Only a file with no
+     * node a profile can hold (proxy-providers only, say) is stored whole as one profile of its
+     * core, named after [fileName]; a full configuration to run as written goes through the custom
+     * config editor. Anything else is imported like pasted text.
      *
      * @return The number of configurations and subscriptions imported.
      */
@@ -231,6 +233,8 @@ object AngConfigManager {
         val core = NativeConfigDetector.detect(text)
         if (core == CoreType.MIHOMO || core == CoreType.SING_BOX) {
             return try {
+                val nodes = parseNativeNodes(text, subid, append = true)
+                if (nodes > 0) return nodes to 0
                 val remarks = fileName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
                 importNativeConfig(text, core, subid, append = true, remarks = remarks) to 0
             } catch (e: ProfileStorageException) {

@@ -582,6 +582,7 @@
     <string name="title_default_core">Standart nüvə</string>
     <string name="title_profile_core">Nüvə</string>
     <string name="core_follow_default">Standart (%1$s)</string>
+    <string name="core_auto_detect">Avtomatik aşkarlama</string>
     <string name="summary_xray_only">Yalnız Xray tərəfindən istifadə olunur</string>
 
     <string name="title_core_groups">Siyasət qrupları</string>

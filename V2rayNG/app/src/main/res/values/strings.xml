@@ -582,6 +582,7 @@
     <string name="title_default_core">Default core</string>
     <string name="title_profile_core">Core</string>
     <string name="core_follow_default">Default (%1$s)</string>
+    <string name="core_auto_detect">Auto detect</string>
     <string name="summary_xray_only">Only used by Xray</string>
 
     <string name="title_core_groups">Policy groups</string>

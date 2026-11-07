@@ -585,6 +585,7 @@
     <string name="title_default_core">Ядро по умолчанию</string>
     <string name="title_profile_core">Ядро</string>
     <string name="core_follow_default">По умолчанию (%1$s)</string>
+    <string name="core_auto_detect">Автоопределение</string>
     <string name="summary_xray_only">Используется только Xray</string>
 
     <string name="title_core_groups">Группы политик</string>

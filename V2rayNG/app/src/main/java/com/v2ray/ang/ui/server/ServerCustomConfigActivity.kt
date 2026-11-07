@@ -67,6 +67,7 @@ import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.DeleteConfirmDialog
+import com.v2ray.ang.ui.compose.FormDropdownField
 import com.v2ray.ang.ui.compose.FormTextField
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
 import com.v2ray.ang.ui.compose.horizontalScrollbar
@@ -85,12 +86,14 @@ class ServerCustomConfigActivity : BaseComponentActivity() {
 
     private var initialRemarks: String = ""
     private var initialContent: String = ""
+    private var initialCore: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val config = MmkvManager.decodeServerConfig(editGuid)
         initialRemarks = config?.remarks ?: ""
         initialContent = MmkvManager.decodeServerRaw(editGuid).orEmpty()
+        initialCore = config?.coreType.orEmpty()
     }
 
     @Composable
@@ -100,22 +103,26 @@ class ServerCustomConfigActivity : BaseComponentActivity() {
             isRunning = isRunning,
             initialRemarks = initialRemarks,
             initialContent = initialContent,
+            initialCore = initialCore,
             onBackClick = { finish() },
-            onSave = { remarks, content -> saveServer(remarks, content) },
+            onSave = { remarks, content, core -> saveServer(remarks, content, core) },
             onDelete = { deleteServer() }
         )
     }
 
     private fun saveServer(
         remarks: String,
-        content: String
+        content: String,
+        core: String
     ): Boolean {
         if (remarks.isBlank()) {
             return false
         }
 
-        // A mihomo YAML or sing-box JSON is stored as written and runs on that core.
-        val nativeCore = NativeConfigDetector.detect(content)?.takeIf { it != CoreType.XRAY }
+        // A mihomo YAML or sing-box JSON is stored as written and runs on that core. The core the
+        // user picked wins over detection; "auto" (empty) detects it from the content.
+        val chosenCore = CoreType.fromValue(core)
+        val nativeCore = (chosenCore ?: NativeConfigDetector.detect(content))?.takeIf { it != CoreType.XRAY }
         val parsedProfile = if (nativeCore != null) null else try {
             CustomFmt.parse(content)
         } catch (e: Exception) {
@@ -206,11 +213,14 @@ fun ServerCustomConfigScreen(
     isRunning: Boolean,
     initialRemarks: String,
     initialContent: String,
+    initialCore: String,
     onBackClick: () -> Unit,
-    onSave: (String, String) -> Boolean,
+    onSave: (String, String, String) -> Boolean,
     onDelete: () -> Unit
 ) {
     var remarks by rememberSaveable { mutableStateOf(initialRemarks) }
+    // CoreType.value, or empty to detect the core from the content.
+    var core by rememberSaveable { mutableStateOf(initialCore) }
     var isRemarksError by rememberSaveable { mutableStateOf(false) }
     val textFieldState = rememberTextFieldState(initialText = initialContent)
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -336,7 +346,7 @@ fun ServerCustomConfigScreen(
 
                         val hasError = remarksErr
                         if (!hasError) {
-                            onSave(remarks, textFieldState.text.toString())
+                            onSave(remarks, textFieldState.text.toString(), core)
                         }
                     }) {
                         Icon(
@@ -360,6 +370,18 @@ fun ServerCustomConfigScreen(
                 value = remarks,
                 onValueChange = { remarks = it },
                 isError = isRemarksError
+            )
+            val coreOptions: List<CoreType?> = listOf<CoreType?>(null) + CoreType.entries
+            val autoLabel = stringResource(R.string.core_auto_detect)
+            val coreLabels = coreOptions.map { it?.displayName ?: autoLabel }
+            FormDropdownField(
+                stringResource(R.string.title_profile_core),
+                CoreType.fromValue(core)?.displayName ?: autoLabel,
+                coreLabels,
+                { label ->
+                    val index = coreLabels.indexOf(label)
+                    if (index >= 0) core = coreOptions[index]?.value.orEmpty()
+                }
             )
 
             Box(

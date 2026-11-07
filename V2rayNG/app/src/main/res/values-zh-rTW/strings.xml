@@ -579,6 +579,7 @@
     <string name="title_default_core">預設核心</string>
     <string name="title_profile_core">核心</string>
     <string name="core_follow_default">預設（%1$s）</string>
+    <string name="core_auto_detect">自動識別</string>
     <string name="summary_xray_only">僅 Xray 使用</string>
 
     <string name="title_core_groups">策略群組</string>

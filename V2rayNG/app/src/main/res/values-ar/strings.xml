@@ -589,6 +589,7 @@
     <string name="title_default_core">النواة الافتراضية</string>
     <string name="title_profile_core">النواة</string>
     <string name="core_follow_default">الافتراضي (%1$s)</string>
+    <string name="core_auto_detect">اكتشاف تلقائي</string>
     <string name="summary_xray_only">يُستخدم من قبل Xray فقط</string>
 
     <string name="title_core_groups">مجموعات السياسات</string>
