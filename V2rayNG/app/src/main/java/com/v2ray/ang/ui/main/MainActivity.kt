@@ -1,9 +1,11 @@
 package com.v2ray.ang.ui.main
 
 import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +54,20 @@ import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * Types offered when importing a configuration file: share-link lists, Xray / sing-box JSON and
+ * Clash YAML. Many file providers report .json / .yaml / .yml as octet-stream or no type at all,
+ * so every file stays selectable.
+ */
+private val CONFIG_FILE_MIME_TYPES = arrayOf(
+    "application/json",
+    "application/yaml",
+    "application/x-yaml",
+    "text/*",
+    "application/octet-stream",
+    "*/*",
+)
 
 class MainActivity : HelperBaseComponentActivity() {
 
@@ -240,16 +256,35 @@ class MainActivity : HelperBaseComponentActivity() {
     }
 
     private fun importConfigLocal() {
-        launchFileChooser { uri ->
+        launchFileChooser(mimeTypes = CONFIG_FILE_MIME_TYPES) { uri ->
             if (uri == null) return@launchFileChooser
-            try {
-                contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                    mainViewModel.onAction(MainAction.ImportBatchConfig(reader.readText()))
+            lifecycleScope.launch(Dispatchers.IO) {
+                val picked = try {
+                    val content = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    content?.let { it to queryDisplayName(uri) }
+                } catch (e: Exception) {
+                    LogUtil.e(AppConfig.TAG, "Failed to read content from URI", e)
+                    null
                 }
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "Failed to read content from URI", e)
+                withContext(Dispatchers.Main) {
+                    if (picked == null) {
+                        toastError(R.string.toast_failure)
+                    } else {
+                        mainViewModel.onAction(MainAction.ImportConfigFile(picked.first, picked.second))
+                    }
+                }
             }
         }
+    }
+
+    /** The file name the provider shows for [uri], null when it has none. */
+    private fun queryDisplayName(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    } catch (e: Exception) {
+        LogUtil.w(AppConfig.TAG, "Failed to read the picked file name", e)
+        null
     }
 
     private fun editServer(guid: String, profile: ProfileItem) {

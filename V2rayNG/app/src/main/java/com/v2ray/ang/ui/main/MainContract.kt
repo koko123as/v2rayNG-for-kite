@@ -77,6 +77,8 @@ sealed interface MainAction {
     data class OpenSubscriptionLink(val url: String) : MainAction
 
     data class ImportBatchConfig(val configText: String) : MainAction
+    /** Content of a file the user picked; [fileName] names a whole-file profile. */
+    data class ImportConfigFile(val content: String, val fileName: String?) : MainAction
 
     data object LocateHandled : MainAction
 }

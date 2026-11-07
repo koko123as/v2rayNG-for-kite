@@ -188,6 +188,8 @@ dependencies {
     // Data and Storage Libraries
     implementation(libs.mmkv.static)
     implementation(libs.gson)
+    // Clash (mihomo) YAML subscriptions, split into one profile per node
+    implementation(libs.snakeyaml.engine)
     implementation(libs.okhttp)
 
     // Reactive and Utility Libraries

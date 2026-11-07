@@ -311,6 +311,7 @@ class MainViewModel(
             is MainAction.SelectCoreGroupMember -> dataSource.requestCoreGroups(selection = action.group to action.member)
             is MainAction.Search -> filterConfig(action.query)
             is MainAction.ImportBatchConfig -> importBatchConfig(action.configText)
+            is MainAction.ImportConfigFile -> importConfigFile(action.content, action.fileName)
             MainAction.LocateHandled -> consumeLocateTarget()
             is MainAction.ShareQRCode -> {
                 val bitmap = dataSource.share2QRCode(action.guid)
@@ -538,12 +539,19 @@ class MainViewModel(
 
     // ---------- Business actions (coroutine-based) ----------
     private fun importBatchConfig(configText: String) {
+        importConfigs { groupId -> dataSource.importBatchConfig(configText, groupId, true) }
+    }
+
+    private fun importConfigFile(content: String, fileName: String?) {
+        importConfigs { groupId -> dataSource.importConfigFile(content, groupId, fileName) }
+    }
+
+    /** Runs [runImport] into the selected group and reports how many configurations it added. */
+    private fun importConfigs(runImport: suspend (groupId: String) -> Pair<Int, Int>) {
         launchLoading {
             withContext(ioDispatcher) {
                 try {
-                    val (count, countSub) = dataSource.importBatchConfig(
-                        configText, uiState.value.selectedGroupId, true
-                    )
+                    val (count, countSub) = runImport(uiState.value.selectedGroupId)
                     when {
                         count > 0 -> {
                             toast(dataSource.getString(R.string.title_import_config_count, count))

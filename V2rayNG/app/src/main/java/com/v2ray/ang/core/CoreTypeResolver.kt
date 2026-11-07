@@ -46,18 +46,6 @@ object CoreTypeResolver {
         return own ?: default
     }
 
-    /**
-     * User-Agent a subscription request sends when the subscription has none, so the provider
-     * answers in [core]'s format: Clash YAML for mihomo, sing-box JSON for sing-box. Null keeps
-     * the app default (share links) for Xray.
-     */
-    fun subscriptionUserAgent(core: CoreType): String? = when (core) {
-        CoreType.XRAY -> null
-        CoreType.MIHOMO -> "clash.meta"
-        // Keep in step with SING_BOX_VERSION in version.properties.
-        CoreType.SING_BOX -> "sing-box 1.14.4"
-    }
-
     /** The core of the selected profile, null when none is selected or it cannot be read. */
     fun resolveSelected(): CoreType? {
         val guid = MmkvManager.getSelectServer() ?: return null

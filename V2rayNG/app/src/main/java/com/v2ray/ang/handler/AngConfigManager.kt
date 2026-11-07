@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.text.TextUtils
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
-import com.v2ray.ang.core.CoreTypeResolver
 import com.v2ray.ang.core.NativeConfigDetector
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.UrlContentRequest
@@ -18,6 +17,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.fmt.CustomFmt
 import com.v2ray.ang.fmt.Hysteria2Fmt
+import com.v2ray.ang.fmt.NativeNodeFmt
 import com.v2ray.ang.fmt.ShadowsocksFmt
 import com.v2ray.ang.fmt.SocksFmt
 import com.v2ray.ang.fmt.TrojanFmt
@@ -186,6 +186,16 @@ object AngConfigManager {
      */
     fun importBatchConfig(server: String?, subid: String, append: Boolean): Pair<Int, Int> {
         return try {
+            // A Clash YAML or sing-box JSON is split into its nodes. Only when it has none that a
+            // profile can hold (e.g. proxy-providers only) is it kept whole, so nothing pasted is lost.
+            val nativeCount = parseNativeNodes(server, subid, append)
+            if (nativeCount > 0) return nativeCount to 0
+            if (nativeCount == 0) {
+                val core = NativeConfigDetector.detect(server)
+                val whole = if (server != null && core != null) importNativeConfig(NativeConfigDetector.stripBom(server), core, subid, append, null) else 0
+                return whole to 0
+            }
+
             var count = parseBatchConfig(Utils.decode(server), subid, append)
             if (count <= 0) {
                 count = parseBatchConfig(server, subid, append)
@@ -207,6 +217,57 @@ object AngConfigManager {
             LogUtil.e(AppConfig.TAG, "Failed to store imported profiles", e)
             0 to 0
         }
+    }
+
+    /**
+     * Imports the content of a file the user picked. A full mihomo (Clash) YAML or sing-box JSON
+     * (JSONC accepted) is stored whole as one profile of that core, named after [fileName];
+     * anything else is imported like pasted text.
+     *
+     * @return The number of configurations and subscriptions imported.
+     */
+    fun importConfigFile(content: String?, subid: String, fileName: String?): Pair<Int, Int> {
+        val text = NativeConfigDetector.stripBom(content)
+        val core = NativeConfigDetector.detect(text)
+        if (core == CoreType.MIHOMO || core == CoreType.SING_BOX) {
+            return try {
+                val remarks = fileName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+                importNativeConfig(text, core, subid, append = true, remarks = remarks) to 0
+            } catch (e: ProfileStorageException) {
+                LogUtil.e(AppConfig.TAG, "Failed to store imported ${core.value} config file", e)
+                0 to 0
+            }
+        }
+        return importBatchConfig(text, subid, true)
+    }
+
+    /**
+     * Imports each proxy node of a Clash YAML or sing-box JSON as its own profile.
+     *
+     * @return The number of profiles stored, or -1 when [server] is in neither format.
+     */
+    private fun parseNativeNodes(server: String?, subid: String, append: Boolean): Int {
+        val result = try {
+            NativeNodeFmt.parse(server)
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to split native config into nodes", e)
+            null
+        } ?: return -1
+        if (result.skipped > 0) {
+            LogUtil.w(AppConfig.TAG, "Native config import: skipped ${result.skipped} node(s) no profile type can hold")
+        }
+        val subItem = MmkvManager.decodeSubscription(subid)
+        val filter = subItem?.filter?.takeIf { it.isNotEmpty() }?.let { runCatching { Regex(it) }.getOrNull() }
+        val configs = result.profiles
+            .filter { filter == null || it.remarks.isEmpty() || filter.containsMatchIn(it.remarks) }
+            .onEach {
+                it.subscriptionId = subid
+                it.description = generateDescription(it)
+            }
+        if (configs.isEmpty()) return 0
+        // Each stored profile is put first in the list, so the last node goes in first.
+        commitProfiles(configs.reversed().map(::ParsedProfile), subid, append)
+        return configs.size
     }
 
     /**
@@ -330,10 +391,6 @@ object AngConfigManager {
         if (server == null) {
             return 0
         }
-        val nativeCore = NativeConfigDetector.detect(server)
-        if (nativeCore == CoreType.MIHOMO || nativeCore == CoreType.SING_BOX) {
-            return importNativeConfig(server, nativeCore, subid, append)
-        }
         if (server.contains("inbounds")
             && server.contains("outbounds")
             && server.contains("routing")
@@ -404,9 +461,9 @@ object AngConfigManager {
      * Stores a full mihomo or sing-box configuration as one CUSTOM profile of that core. The
      * configuration is kept as written; libkite replaces its inbounds for the run mode.
      */
-    private fun importNativeConfig(server: String, core: CoreType, subid: String, append: Boolean): Int {
+    private fun importNativeConfig(server: String, core: CoreType, subid: String, append: Boolean, remarks: String?): Int {
         return try {
-            val config = createNativeProfile(core, MmkvManager.decodeSubscription(subid)?.remarks)
+            val config = createNativeProfile(core, remarks ?: MmkvManager.decodeSubscription(subid)?.remarks)
             config.subscriptionId = subid
             commitProfiles(
                 configs = listOf(ParsedProfile(config, server)),
@@ -523,9 +580,9 @@ object AngConfigManager {
                 }
             }
             LogUtil.i(AppConfig.TAG, url)
-            // Without a custom User-Agent the provider is asked for the default core's format.
-            val userAgent = it.subscription.userAgent?.takeIf { ua -> ua.isNotBlank() }
-                ?: CoreTypeResolver.subscriptionUserAgent(CoreTypeResolver.globalDefault())
+            // Without a custom User-Agent the app default is sent, whatever the default core, so
+            // the provider answers with the share-link node list rather than one Clash/sing-box file.
+            val userAgent = it.subscription.userAgent
             val requestHeaders = it.subscription.requestHeaders
             val proxyUsername = SettingsManager.getSocksUsername()
             val proxyPassword = SettingsManager.getSocksPassword()
@@ -643,6 +700,10 @@ object AngConfigManager {
      * @return The number of configurations parsed.
      */
     private fun parseConfigViaSub(server: String?, subid: String, append: Boolean): Int {
+        // A provider that answers with a Clash YAML or sing-box JSON gets one profile per node,
+        // never one whole-file profile.
+        val nativeCount = parseNativeNodes(server, subid, append)
+        if (nativeCount >= 0) return nativeCount
         var count = parseBatchConfig(Utils.decode(server), subid, append)
         if (count <= 0) {
             count = parseBatchConfig(server, subid, append)

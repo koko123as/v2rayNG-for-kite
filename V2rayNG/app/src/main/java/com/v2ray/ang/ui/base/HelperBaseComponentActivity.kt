@@ -51,13 +51,15 @@ abstract class HelperBaseComponentActivity : BaseComponentActivity() {
      * Convenience method that delegates to fileChooser helper.
      *
      * @param mimeType MIME type filter for files
+     * @param mimeTypes Several accepted MIME types; overrides [mimeType] when set
      * @param onResult Callback invoked with the selected file URI (null if cancelled)
      */
     protected fun launchFileChooser(
         mimeType: String = "*/*",
+        mimeTypes: Array<String>? = null,
         onResult: (Uri?) -> Unit
     ) {
-        fileChooser.launch(mimeType, onResult)
+        fileChooser.launch(mimeType, mimeTypes, onResult)
     }
 
     /**

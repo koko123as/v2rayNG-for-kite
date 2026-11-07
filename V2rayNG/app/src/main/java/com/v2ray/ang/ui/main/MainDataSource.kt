@@ -54,6 +54,12 @@ interface MainDataSource : Closeable {
         updateUI: Boolean
     ): Pair<Int, Int>
 
+    suspend fun importConfigFile(
+        content: String,
+        subscriptionId: String,
+        fileName: String?
+    ): Pair<Int, Int>
+
     fun updateConfigViaSubAll(): SubscriptionUpdateResult
     fun updateConfigViaSub(subscriptionCache: SubscriptionCache): SubscriptionUpdateResult
 

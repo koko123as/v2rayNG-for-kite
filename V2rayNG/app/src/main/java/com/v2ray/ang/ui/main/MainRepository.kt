@@ -206,6 +206,12 @@ class MainRepository(
         updateUI: Boolean
     ): Pair<Int, Int> = AngConfigManager.importBatchConfig(server, subscriptionId, updateUI)
 
+    override suspend fun importConfigFile(
+        content: String,
+        subscriptionId: String,
+        fileName: String?
+    ): Pair<Int, Int> = AngConfigManager.importConfigFile(content, subscriptionId, fileName)
+
     override fun updateConfigViaSubAll(): SubscriptionUpdateResult =
         AngConfigManager.updateConfigViaSubAll()
 
