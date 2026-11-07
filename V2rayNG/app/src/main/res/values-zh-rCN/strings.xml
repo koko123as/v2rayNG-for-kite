@@ -576,4 +576,11 @@
     <string name="core_unsupported_features">%1$s 不支持 %2$s，请将此配置切换到 Xray。</string>
     <string name="core_ignored_features">%2$s 仅在 Xray 中生效，%1$s 将忽略。</string>
 
+    <string name="title_default_core">默认内核</string>
+    <string name="title_profile_core">内核</string>
+    <string name="core_follow_default">默认（%1$s）</string>
+    <string name="summary_xray_only">仅 Xray 使用</string>
+
+    <string name="title_core_groups">策略组</string>
+    <string name="core_groups_empty">没有策略组。运行 mihomo 或 sing-box 配置时会在此列出。</string>
 </resources>

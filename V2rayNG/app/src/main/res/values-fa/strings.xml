@@ -578,4 +578,11 @@
     <string name="core_unsupported_features">%1$s نمی‌تواند %2$s را اجرا کند. این پروفایل را به Xray تغییر دهید.</string>
     <string name="core_ignored_features">%2$s فقط در Xray کار می‌کنند و %1$s آن‌ها را نادیده می‌گیرد.</string>
 
+    <string name="title_default_core">هسته پیش‌فرض</string>
+    <string name="title_profile_core">هسته</string>
+    <string name="core_follow_default">پیش‌فرض (%1$s)</string>
+    <string name="summary_xray_only">فقط توسط Xray استفاده می‌شود</string>
+
+    <string name="title_core_groups">گروه‌های سیاست</string>
+    <string name="core_groups_empty">گروه سیاستی وجود ندارد. هنگام اجرای پروفایل mihomo یا sing-box نمایش داده می‌شوند.</string>
 </resources>

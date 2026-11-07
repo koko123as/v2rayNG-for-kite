@@ -578,4 +578,11 @@
     <string name="core_unsupported_features">%1$s %2$s চালাতে পারে না। এই প্রোফাইলটি Xray-তে পরিবর্তন করুন।</string>
     <string name="core_ignored_features">%2$s শুধু Xray-তে কাজ করে, %1$s এগুলো উপেক্ষা করে।</string>
 
+    <string name="title_default_core">ডিফল্ট কোর</string>
+    <string name="title_profile_core">কোর</string>
+    <string name="core_follow_default">ডিফল্ট (%1$s)</string>
+    <string name="summary_xray_only">শুধু Xray ব্যবহার করে</string>
+
+    <string name="title_core_groups">পলিসি গ্রুপ</string>
+    <string name="core_groups_empty">কোনো পলিসি গ্রুপ নেই। mihomo বা sing-box প্রোফাইল চলার সময় এগুলো দেখানো হয়।</string>
 </resources>

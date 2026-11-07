@@ -576,4 +576,11 @@
     <string name="core_unsupported_features">%1$s 不支援 %2$s，請將此設定檔切換到 Xray。</string>
     <string name="core_ignored_features">%2$s 僅在 Xray 中生效，%1$s 將忽略。</string>
 
+    <string name="title_default_core">預設核心</string>
+    <string name="title_profile_core">核心</string>
+    <string name="core_follow_default">預設（%1$s）</string>
+    <string name="summary_xray_only">僅 Xray 使用</string>
+
+    <string name="title_core_groups">策略群組</string>
+    <string name="core_groups_empty">沒有策略群組。執行 mihomo 或 sing-box 設定時會在此列出。</string>
 </resources>

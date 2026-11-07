@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.core.CoreTypeResolver
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.RealPingResult
 import com.v2ray.ang.dto.SubscriptionUpdateResult
@@ -16,6 +17,7 @@ import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.ServerAffiliationInfo
 import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.AppLocaleManager
@@ -73,6 +75,9 @@ class MainRepository(
                     requestId
                 )
                 AppConfig.MSG_MEASURE_CONFIG_CANCEL -> MainServiceEvent.MeasureConfigCancelled(requestId)
+                AppConfig.MSG_CORE_GROUPS_RESULT -> MainServiceEvent.CoreGroups(
+                    safeIntent.getStringExtra("content").orEmpty()
+                )
 
                 else -> null
             }
@@ -125,6 +130,8 @@ class MainRepository(
     override fun isGroupAllDisplayEnabled(): Boolean =
         MmkvManager.decodeSettingsBool(AppConfig.PREF_GROUP_ALL_DISPLAY)
 
+    override fun getDefaultCore(): CoreType = CoreTypeResolver.globalDefault()
+
     override fun getString(resId: Int): String = localizedContext.getString(resId)
 
     override fun getString(resId: Int, vararg formatArgs: Any): String =
@@ -164,6 +171,13 @@ class MainRepository(
         MmkvManager.encodeServerList(ArrayList(guids), groupId)
 
     override fun removeServer(guid: String) = MmkvManager.removeServer(guid)
+
+    override fun setProfileCore(guid: String, core: CoreType?): Boolean {
+        val profile = MmkvManager.decodeServerConfig(guid) ?: return false
+        profile.coreType = core?.value
+        MmkvManager.encodeServerConfig(guid, profile)
+        return true
+    }
 
     override fun removeAllServer(): Int = MmkvManager.removeAllServer()
 
@@ -217,6 +231,15 @@ class MainRepository(
         sendMsg2TestService(
             TestServiceMessage(key = AppConfig.MSG_MEASURE_CONFIG_CANCEL)
         )
+    }
+
+    override fun requestCoreGroups(selection: Pair<String, String>?) {
+        val what = if (selection == null) AppConfig.MSG_CORE_GROUPS else AppConfig.MSG_CORE_GROUP_SELECT
+        val content = selection?.let { (group, member) -> "$group\n$member" }.orEmpty()
+        MessageHelper.sendMsg2ServiceForResult(app, what, content) { handled ->
+            // No daemon: nothing runs, so there are no groups to show.
+            if (!handled) mainServiceEventChannel.trySend(MainServiceEvent.CoreGroups("[]"))
+        }
     }
 
     override fun testCurrentServerRealPing(requestId: String) {

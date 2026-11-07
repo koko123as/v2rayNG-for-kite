@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.ui.compose.AppDropdownMenuItems
@@ -28,6 +29,7 @@ private enum class ImportMenuAction(@StringRes val labelRes: Int, val action: Ma
 
 enum class MainMoreMenuAction(@StringRes val labelRes: Int) {
     RestartService(R.string.title_service_restart),
+    CoreGroups(R.string.title_core_groups),
     DeleteAll(R.string.title_del_all_config),
     DeleteDuplicate(R.string.title_del_duplicate_config),
     DeleteInvalid(R.string.title_del_invalid_config),
@@ -49,14 +51,21 @@ internal enum class ServerMenuAction(
     ShareFullContent(R.string.share_method_full_content, isShareAction = true, supportsComplexProfiles = true),
     Edit(R.string.action_edit, isShareAction = false, supportsComplexProfiles = true),
     Delete(R.string.action_delete, isShareAction = false, supportsComplexProfiles = true),
+    // Listed with the share actions so the single-column share button reaches it too.
+    SelectCore(R.string.title_profile_core, isShareAction = true, supportsComplexProfiles = true),
 }
 
 internal fun serverMenuActions(
     isComplexProfile: Boolean,
     includeManagementActions: Boolean,
+    supportsCoreSelection: Boolean = false,
 ): List<ServerMenuAction> = ServerMenuAction.entries.filter { action ->
-    (includeManagementActions || action.isShareAction) && (!isComplexProfile || action.supportsComplexProfiles)
+    (action != ServerMenuAction.SelectCore || supportsCoreSelection) &&
+        (includeManagementActions || action.isShareAction) && (!isComplexProfile || action.supportsComplexProfiles)
 }
+
+/** Native configurations run on the core they were written for, every other profile can pick one. */
+internal fun supportsCoreSelection(profile: ProfileItem): Boolean = profile.configType != EConfigType.CUSTOM
 
 @Composable
 fun ImportMenuContent(onAction: (MainAction) -> Unit) = AppDropdownMenuItems(
@@ -72,6 +81,35 @@ fun MoreMenuContent(onSelected: (MainMoreMenuAction) -> Unit) = AppDropdownMenuI
     onSelected = onSelected
 )
 
+/**
+ * Picks the core of one profile: the global default (null) or a fixed core. Shows which option is
+ * active and stores the choice through [MainAction.SetProfileCore].
+ */
+@Composable
+fun CoreSelectDialog(
+    guid: String,
+    profile: ProfileItem,
+    defaultCore: CoreType,
+    onDismiss: () -> Unit,
+    onAction: (MainAction) -> Unit,
+) {
+    val options: List<CoreType?> = listOf<CoreType?>(null) + CoreType.entries
+    SelectListDialog(
+        options = options,
+        optionText = { core ->
+            core?.displayName ?: stringResource(R.string.core_follow_default, defaultCore.displayName)
+        },
+        onSelected = { core ->
+            onDismiss()
+            onAction(MainAction.SetProfileCore(guid, core))
+        },
+        onDismiss = onDismiss,
+        title = stringResource(R.string.title_profile_core),
+        selectedOption = CoreType.fromValue(profile.coreType),
+        showRadio = true,
+    )
+}
+
 @Composable
 fun ShareMethodDialog(
     guid: String,
@@ -80,10 +118,12 @@ fun ShareMethodDialog(
     onDismiss: () -> Unit,
     onAction: (MainAction) -> Unit,
     onRemove: (String, String) -> Unit,
+    onSelectCore: (String, ProfileItem) -> Unit,
 ) {
     val menuActions = serverMenuActions(
         isComplexProfile = profile.configType.isComplexType(),
         includeManagementActions = more,
+        supportsCoreSelection = supportsCoreSelection(profile),
     )
     SelectListDialog(
         options = menuActions,
@@ -96,6 +136,7 @@ fun ShareMethodDialog(
                 ServerMenuAction.ShareFullContent -> onAction(MainAction.ShareFullContent(guid))
                 ServerMenuAction.Edit -> onAction(MainAction.EditServer(guid, profile))
                 ServerMenuAction.Delete -> onRemove(guid, profile.remarks)
+                ServerMenuAction.SelectCore -> onSelectCore(guid, profile)
             }
         },
         onDismiss = onDismiss

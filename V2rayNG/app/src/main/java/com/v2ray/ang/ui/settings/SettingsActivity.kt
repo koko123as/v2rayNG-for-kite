@@ -34,6 +34,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.VPN
 import com.v2ray.ang.R
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.extension.toastError
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.MmkvManager
@@ -174,6 +175,7 @@ fun SettingsScreen(
     var domesticDns by rememberMmkvString(AppConfig.PREF_DOMESTIC_DNS, "")
     var dnsHosts by rememberMmkvString(AppConfig.PREF_DNS_HOSTS, "")
     var coreLogLevel by rememberMmkvString(AppConfig.PREF_LOGLEVEL, "warning")
+    var defaultCore by rememberMmkvString(AppConfig.PREF_CORE_TYPE, CoreType.XRAY.value)
     var outboundResolveMethod by rememberMmkvString(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, AppConfig.DEFAULT_OUTBOUND_DOMAIN_RESOLVE_METHOD)
 
     var isBooted by rememberMmkvBool(AppConfig.PREF_IS_BOOTED, false)
@@ -206,6 +208,9 @@ fun SettingsScreen(
     val hevLogEntries = stringArrayResource(R.array.hev_tunnel_loglevel).toList()
     val hevLogValues = stringArrayResource(R.array.hev_tunnel_loglevel).toList()
     val coreLogLevelEntries = stringArrayResource(R.array.core_loglevel).toList()
+    val coreTypeEntries = CoreType.entries.map { it.displayName }
+    val coreTypeValues = CoreType.entries.map { it.value }
+    val xrayOnlySummary = stringResource(R.string.summary_xray_only)
     val coreLogLevelValues = stringArrayResource(R.array.core_loglevel).toList()
     val outboundResolveEntries = stringArrayResource(R.array.outbound_domain_resolve_method).toList()
     val outboundResolveValues = stringArrayResource(R.array.outbound_domain_resolve_method_value).toList()
@@ -406,6 +411,13 @@ fun SettingsScreen(
                 onExpandedChange = { coreSettingsExpanded = it }
             )
             if (coreSettingsExpanded) {
+                SettingsListItem(
+                    title = stringResource(R.string.title_default_core),
+                    entries = coreTypeEntries,
+                    values = coreTypeValues,
+                    selectedValue = defaultCore,
+                    onSelected = { defaultCore = it }
+                )
                 SettingsSwitchItem(
                     title = stringResource(R.string.title_pref_sniffing_enabled),
                     summary = stringResource(R.string.summary_pref_sniffing_enabled),
@@ -512,7 +524,7 @@ fun SettingsScreen(
             if (muxSettingsExpanded) {
                 SettingsSwitchItem(
                     title = stringResource(R.string.title_pref_mux_enabled),
-                    summary = stringResource(R.string.summary_pref_mux_enabled),
+                    summary = stringResource(R.string.summary_pref_mux_enabled) + "\n" + xrayOnlySummary,
                     checked = mux,
                     onCheckedChange = { mux = it }
                 )
@@ -548,6 +560,7 @@ fun SettingsScreen(
             if (fragmentSettingsExpanded) {
                 SettingsSwitchItem(
                     title = stringResource(R.string.title_pref_fragment_enabled),
+                    summary = xrayOnlySummary,
                     checked = fragment,
                     onCheckedChange = { fragment = it }
                 )

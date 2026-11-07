@@ -504,6 +504,26 @@ object CoreServiceManager {
         }
     }
 
+    /**
+     * Answers the UI with the policy groups of the running mihomo / sing-box ("[]" for Xray),
+     * after selecting [selection] (group to member) when given. Native calls run off the main thread.
+     */
+    private fun sendCoreGroups(service: Service, selection: Pair<String, String>?) {
+        connectionTestScope.launch {
+            var groups = "[]"
+            try {
+                if (CoreNativeManager.isKiteCoreRunning()) {
+                    selection?.let { (group, member) -> CoreNativeManager.selectKiteOutbound(group, member) }
+                    groups = CoreNativeManager.getKiteGroups()
+                }
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Manager: policy group request failed (${currentCore?.value})", e)
+                groups = runCatching { CoreNativeManager.getKiteGroups() }.getOrDefault("[]")
+            }
+            MessageHelper.sendMsg2UI(service, AppConfig.MSG_CORE_GROUPS_RESULT, groups)
+        }
+    }
+
     /** Delay through whichever core runs; mihomo follows its rules, sing-box its "proxy" outbound. */
     private fun measureRunningDelay(url: String): Long {
         return if (CoreNativeManager.isKiteCoreRunning()) {
@@ -649,6 +669,17 @@ object CoreServiceManager {
                 AppConfig.MSG_MEASURE_DELAY -> {
                     if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
                     measureV2rayDelay(intent.getStringExtra("content").orEmpty())
+                }
+
+                AppConfig.MSG_CORE_GROUPS -> {
+                    if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
+                    sendCoreGroups(serviceControl.getService(), selection = null)
+                }
+
+                AppConfig.MSG_CORE_GROUP_SELECT -> {
+                    if (isOrderedBroadcast) resultCode = Activity.RESULT_OK
+                    val parts = intent.getStringExtra("content").orEmpty().split("\n", limit = 2)
+                    sendCoreGroups(serviceControl.getService(), selection = parts.getOrElse(0) { "" } to parts.getOrElse(1) { "" })
                 }
             }
 

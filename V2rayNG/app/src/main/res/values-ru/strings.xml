@@ -582,4 +582,11 @@
     <string name="core_unsupported_features">%1$s не поддерживает %2$s. Переключите этот профиль на Xray.</string>
     <string name="core_ignored_features">%2$s работают только в Xray и игнорируются %1$s.</string>
 
+    <string name="title_default_core">Ядро по умолчанию</string>
+    <string name="title_profile_core">Ядро</string>
+    <string name="core_follow_default">По умолчанию (%1$s)</string>
+    <string name="summary_xray_only">Используется только Xray</string>
+
+    <string name="title_core_groups">Группы политик</string>
+    <string name="core_groups_empty">Нет групп политик. Они показываются, пока работает профиль mihomo или sing-box.</string>
 </resources>

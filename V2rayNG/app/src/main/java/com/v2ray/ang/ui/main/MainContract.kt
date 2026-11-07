@@ -3,6 +3,7 @@ package com.v2ray.ang.ui.main
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.LocateTarget
+import com.v2ray.ang.enums.CoreType
 
 /** Locale-neutral state formatted only when it reaches the main UI. */
 sealed interface MainStatus {
@@ -26,7 +27,11 @@ data class MainUiState(
     val locateTarget: LocateTarget? = null,
     val confirmRemove: Boolean = false,
     val doubleColumnDisplay: Boolean = false,
-    val shareQRCodeBitmap: android.graphics.Bitmap? = null
+    val shareQRCodeBitmap: android.graphics.Bitmap? = null,
+    /** Core that runs profiles without their own core choice. */
+    val defaultCore: CoreType = CoreType.XRAY,
+    /** Policy groups of the running mihomo / sing-box while their dialog is open, null otherwise. */
+    val coreGroups: List<CoreGroupItem>? = null,
 )
 
 /**
@@ -63,6 +68,11 @@ sealed interface MainAction {
     data class ShareQRCode(val guid: String) : MainAction
     data class ShareClipboard(val guid: String) : MainAction
     data class ShareFullContent(val guid: String) : MainAction
+    /** Runs [guid] on [core]; null follows the global default core. */
+    data class SetProfileCore(val guid: String, val core: CoreType?) : MainAction
+    data object ShowCoreGroups : MainAction
+    data object DismissCoreGroups : MainAction
+    data class SelectCoreGroupMember(val group: String, val member: String) : MainAction
     data object DismissQRCodeDialog : MainAction
     data class OpenSubscriptionLink(val url: String) : MainAction
 

@@ -579,4 +579,11 @@
     <string name="core_unsupported_features">%1$s cannot run %2$s. Switch this profile to Xray.</string>
     <string name="core_ignored_features">%2$s only work on Xray and are ignored by %1$s.</string>
 
+    <string name="title_default_core">Default core</string>
+    <string name="title_profile_core">Core</string>
+    <string name="core_follow_default">Default (%1$s)</string>
+    <string name="summary_xray_only">Only used by Xray</string>
+
+    <string name="title_core_groups">Policy groups</string>
+    <string name="core_groups_empty">No policy groups. They are listed while a mihomo or sing-box profile runs.</string>
 </resources>

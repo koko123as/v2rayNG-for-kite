@@ -586,4 +586,11 @@
     <string name="core_unsupported_features">لا يستطيع %1$s تشغيل %2$s. بدّل هذا الملف الشخصي إلى Xray.</string>
     <string name="core_ignored_features">%2$s تعمل مع Xray فقط ويتجاهلها %1$s.</string>
 
+    <string name="title_default_core">النواة الافتراضية</string>
+    <string name="title_profile_core">النواة</string>
+    <string name="core_follow_default">الافتراضي (%1$s)</string>
+    <string name="summary_xray_only">يُستخدم من قبل Xray فقط</string>
+
+    <string name="title_core_groups">مجموعات السياسات</string>
+    <string name="core_groups_empty">لا توجد مجموعات سياسات. تظهر أثناء تشغيل ملف تعريف mihomo أو sing-box.</string>
 </resources>

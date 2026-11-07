@@ -205,6 +205,12 @@ object AppConfig {
     const val MSG_SUB_UPDATE_START = 8
     const val MSG_SUB_UPDATE_CANCEL = 81
 
+    /** Policy groups of the running mihomo / sing-box, answered with [MSG_CORE_GROUPS_RESULT] (JSON). */
+    const val MSG_CORE_GROUPS = 9
+    const val MSG_CORE_GROUPS_RESULT = 91
+    /** Content "group\nmember": selects a member of a selector group, answered like [MSG_CORE_GROUPS]. */
+    const val MSG_CORE_GROUP_SELECT = 92
+
     /** Notification channel IDs and names. */
     // Use a new ID because Android does not let an app raise an existing channel's importance.
     const val RAY_NG_CHANNEL_ID = "CORE_M_CH_ID_V2"
