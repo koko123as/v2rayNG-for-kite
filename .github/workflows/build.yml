@@ -83,7 +83,8 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ env.GO_VERSION }}
+        # setup-go wants the bare version (1.27.3); go.mod pins the same one.
+        go-version-file: libkite/go.mod
         cache-dependency-path: libkite/go.sum
 
     - name: Setup Java
