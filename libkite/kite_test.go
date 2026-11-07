@@ -143,6 +143,9 @@ func TestPrepareSingBoxVPN(t *testing.T) {
 	if len(tunInbound["address"].([]any)) != 2 || tunInbound["route_exclude_address"] == nil {
 		t.Fatalf("tun address/exclude = %v", tunInbound)
 	}
+	if tunInbound["stack"] != "gvisor" {
+		t.Fatalf("tun stack = %v, want gvisor", tunInbound["stack"])
+	}
 	route := root["route"].(map[string]any)
 	rules := route["rules"].([]any)
 	if rules[0].(map[string]any)["action"] != "sniff" || rules[1].(map[string]any)["action"] != "hijack-dns" {

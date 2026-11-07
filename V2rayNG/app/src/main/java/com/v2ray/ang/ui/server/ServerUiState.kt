@@ -63,6 +63,7 @@ class ServerUiState(
     echConfigList: String = "",
     verifyPeerCertByName: String = "",
     pinnedCA256: String = "",
+    coreType: String = "",
     isFetchingCert: Boolean = false
 ) {
     var configType by mutableStateOf(configType)
@@ -112,6 +113,9 @@ class ServerUiState(
     var echConfigList by mutableStateOf(echConfigList)
     var verifyPeerCertByName by mutableStateOf(verifyPeerCertByName)
     var pinnedCA256 by mutableStateOf(pinnedCA256)
+
+    /** CoreType.value of the profile's own core; empty follows the global default. */
+    var coreType by mutableStateOf(coreType)
     var isFetchingCert by mutableStateOf(isFetchingCert)
 
     var isRemarksError by mutableStateOf(false)
@@ -184,7 +188,8 @@ class ServerUiState(
             mldsa65Verify = mldsa65Verify,
             echConfigList = echConfigList,
             verifyPeerCertByName = verifyPeerCertByName,
-            pinnedCA256 = pinnedCA256
+            pinnedCA256 = pinnedCA256,
+            coreType = coreType.nullIfBlank()
         )
     }
 
@@ -239,7 +244,8 @@ class ServerUiState(
                 mldsa65Verify = initialConfig.mldsa65Verify ?: "",
                 echConfigList = initialConfig.echConfigList ?: "",
                 verifyPeerCertByName = initialConfig.verifyPeerCertByName ?: "",
-                pinnedCA256 = initialConfig.pinnedCA256 ?: ""
+                pinnedCA256 = initialConfig.pinnedCA256 ?: "",
+                coreType = initialConfig.coreType ?: ""
             )
 
         fun from(

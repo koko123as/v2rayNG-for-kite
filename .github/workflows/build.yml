@@ -228,4 +228,5 @@ jobs:
           file: release-files/*
           tag: ${{ inputs.release_tag }}
           file_glob: true
-          prerelease: true
+          # A full release, so the in-app update check (releases/latest) finds it.
+          prerelease: false

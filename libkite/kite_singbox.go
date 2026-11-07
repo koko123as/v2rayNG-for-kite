@@ -107,7 +107,10 @@ func prepareSingBoxJSON(content string, options *CoreOptions) (string, error) {
 			"address":      address,
 			"auto_route":   true,
 			"strict_route": false,
-			"stack":        "mixed",
+			// gVisor, as for mihomo: the system/mixed stack answers TCP from a
+			// kernel listener on the tun address, but the app is excluded from
+			// its own VPN, so those replies do not reliably return through the tun.
+			"stack":        "gvisor",
 		}
 		if options.TunMTU > 0 {
 			tunInbound["mtu"] = options.TunMTU
