@@ -9,6 +9,11 @@ on:
   push:
     branches:
       - master
+      - 'feat/**'
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: write
@@ -90,16 +95,28 @@ jobs:
     # libkite: the AndroidLibXrayLite libv2ray API (Xray) plus mihomo and
     # sing-box in one gomobile AAR, built here instead of downloading
     # 2dust/AndroidLibXrayLite's libv2ray.aar.
+    # The AAR only depends on libkite, the AndroidLibXrayLite gitlink and the
+    # pins; reuse it when none of them changed.
+    - name: Restore cached libkite AAR
+      id: cache-libkite-restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        key: libkite-${{ runner.os }}-${{ hashFiles('libkite/**', 'version.properties', '.git/modules/AndroidLibXrayLite/HEAD') }}
+
     - name: Test libkite
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
       run: |
         bash libkite/build.sh test
 
     - name: Verify libkite pins
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
       run: |
         python3 tools/verify_libkite.py
         cat libkite/build/core-module-bumps.txt
 
     - name: Build libkite AAR
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
       run: |
         go install golang.org/x/mobile/cmd/gomobile@${GOMOBILE_VERSION}
         go install golang.org/x/mobile/cmd/gobind@${GOMOBILE_VERSION}
@@ -107,6 +124,13 @@ jobs:
         gomobile init
         bash libkite/build.sh
         ls -l V2rayNG/app/libs/libv2ray.aar
+
+    - name: Save libkite AAR
+      if: steps.cache-libkite-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        key: ${{ steps.cache-libkite-restore.outputs.cache-primary-key }}
 
     - name: Upload libkite report
       uses: actions/upload-artifact@v7
