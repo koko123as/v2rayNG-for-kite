@@ -573,4 +573,17 @@
     <string name="sub_info_open_page">فتح صفحة معلومات الاشتراك</string>
     <string name="sub_info_unlimited">غير محدود</string>
 
+    <string name="core_feature_xhttp">نقل XHTTP</string>
+    <string name="core_feature_xhttp_extra">إعدادات XHTTP الإضافية</string>
+    <string name="core_feature_mkcp">نقل mKCP</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">تمويه ترويسة HTTP عبر TCP</string>
+    <string name="core_feature_mldsa65">تحقق REALITY ML-DSA-65</string>
+    <string name="core_feature_vless_encryption">تشفير VLESS</string>
+    <string name="core_feature_fragment">التجزئة (Fragment)</string>
+    <string name="core_feature_mux">تعدد الإرسال (Mux)</string>
+    <string name="core_unsupported_features">لا يستطيع %1$s تشغيل %2$s. بدّل هذا الملف الشخصي إلى Xray.</string>
+    <string name="core_ignored_features">%2$s تعمل مع Xray فقط ويتجاهلها %1$s.</string>
+
 </resources>

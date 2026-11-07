@@ -12,6 +12,7 @@ import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.RulesetItem
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.handler.MmkvManager
@@ -32,25 +33,8 @@ object CoreConfigManager {
      * Build the runtime configuration for normal startup.
      */
     fun getV2rayConfig(context: Context, guid: String): ConfigResult {
-        try {
-            val configContext = CoreConfigContextBuilder.build(context, guid)
-                ?: return ConfigResult(
-                    status = false,
-                    guid = guid,
-                    errorMessage = "Failed to build config context"
-                )
-            if (configContext.isCustom) {
-                return buildV2rayCustomConfig(configContext)
-            }
-            return toConfigResult(configContext, buildUnifiedConfig(configContext))
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to get V2ray config", e)
-            return ConfigResult(
-                status = false,
-                guid = guid,
-                errorMessage = "Failed to get V2ray config: ${e.message ?: e.javaClass.simpleName}"
-            )
-        }
+        // mihomo / sing-box configuration translation lands with MihomoConfigBuilder / SingboxConfigBuilder.
+        return ConfigResult(status = false, guid = guid, errorMessage = "${core.displayName} configuration is not available yet")
     }
 
     /**

@@ -565,4 +565,17 @@
     <string name="sub_info_open_page">সাবস্ক্রিপশন তথ্যের পাতা খুলুন</string>
     <string name="sub_info_unlimited">সীমাহীন</string>
 
+    <string name="core_feature_xhttp">XHTTP ট্রান্সপোর্ট</string>
+    <string name="core_feature_xhttp_extra">XHTTP অতিরিক্ত সেটিংস</string>
+    <string name="core_feature_mkcp">mKCP ট্রান্সপোর্ট</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">TCP HTTP হেডার ছদ্মবেশ</string>
+    <string name="core_feature_mldsa65">REALITY ML-DSA-65 যাচাই</string>
+    <string name="core_feature_vless_encryption">VLESS এনক্রিপশন</string>
+    <string name="core_feature_fragment">ফ্র্যাগমেন্ট</string>
+    <string name="core_feature_mux">মাক্স (Mux)</string>
+    <string name="core_unsupported_features">%1$s %2$s চালাতে পারে না। এই প্রোফাইলটি Xray-তে পরিবর্তন করুন।</string>
+    <string name="core_ignored_features">%2$s শুধু Xray-তে কাজ করে, %1$s এগুলো উপেক্ষা করে।</string>
+
 </resources>

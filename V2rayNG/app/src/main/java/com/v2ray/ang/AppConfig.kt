@@ -89,6 +89,8 @@ object AppConfig {
     const val PREF_AUTO_REMOVE_INVALID_AFTER_TEST = "pref_auto_remove_invalid_after_test"
     const val PREF_AUTO_SORT_AFTER_TEST = "pref_auto_sort_after_test"
     const val PREF_REAL_PING_CONCURRENCY = "pref_real_ping_concurrency"
+    /** Global default core (CoreType.value); a profile's own coreType overrides it. */
+    const val PREF_CORE_TYPE = "pref_core_type"
 
     /** Cache keys. */
     const val CACHE_SUBSCRIPTION_ID = "cache_subscription_id"
@@ -163,6 +165,10 @@ object AppConfig {
     /** Ports and addresses for various services. */
     const val PORT_LOCAL_DNS = "10853"
     const val PORT_SOCKS = "10808"
+    /** Root mode listeners of mihomo / sing-box (TPROXY, REDIRECT, DNS). */
+    const val PORT_ROOT_TPROXY = 10850
+    const val PORT_ROOT_REDIR = 10851
+    const val PORT_ROOT_DNS = 10852
     const val WIREGUARD_LOCAL_ADDRESS_V4 = "172.16.0.2/32"
     const val WIREGUARD_LOCAL_ADDRESS_V6 = "2606:4700:110:8f81:d551:a0:532e:a2b3/128"
     const val WIREGUARD_LOCAL_MTU = "1420"
@@ -244,6 +250,9 @@ object AppConfig {
     const val ROOT_V6_CHAIN = "CORE6_FILTER"       // ip6tables filter/OUTPUT chain: blackhole native IPv6 when it isn't tunneled
     const val ROOT_V6_FWD_CHAIN = "CORE6_FWD" // ip6tables FORWARD chain: route or reject tethered clients' native IPv6
     const val ROOT_V6_PRE_CHAIN = "CORE6_PRE" // ip6tables mangle/PREROUTING chain: mark forwarded clients' IPv6 into the tun
+    const val ROOT_NAT_CHAIN = "CORE_NAT"           // nat/OUTPUT chain: REDIRECT to the mihomo/sing-box listeners (root mode)
+    const val ROOT_NAT_PRE_CHAIN = "CORE_NAT_PRE"   // nat/PREROUTING chain: REDIRECT tethered clients to the mihomo/sing-box listeners
+    const val ROOT_QUIC_CHAIN = "CORE_QUIC"         // filter/OUTPUT chain: reject QUIC of captured apps (mihomo/sing-box root mode)
     const val ROOT_LAN_DNS = "1.1.1.1"          // fallback resolver for tethered clients when no plain-IPv4 DNS is configured
     const val ROOT_OOM_SCORE = "-1000"          // oom_score_adj that makes the LMK never kill us
 

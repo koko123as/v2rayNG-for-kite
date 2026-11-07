@@ -566,4 +566,17 @@
     <string name="sub_info_traffic" translatable="false">%1$s / %2$s</string>
     <string name="sub_info_unlimited">Unlimited</string>
 
+    <string name="core_feature_xhttp">XHTTP transport</string>
+    <string name="core_feature_xhttp_extra">XHTTP extra settings</string>
+    <string name="core_feature_mkcp">mKCP transport</string>
+    <string name="core_feature_final_mask">finalMask</string>
+    <string name="core_feature_browser_dialer">Browser Dialer</string>
+    <string name="core_feature_tcp_http_header">TCP HTTP header obfuscation</string>
+    <string name="core_feature_mldsa65">REALITY ML-DSA-65 verification</string>
+    <string name="core_feature_vless_encryption">VLESS encryption</string>
+    <string name="core_feature_fragment">Fragment</string>
+    <string name="core_feature_mux">Mux</string>
+    <string name="core_unsupported_features">%1$s cannot run %2$s. Switch this profile to Xray.</string>
+    <string name="core_ignored_features">%2$s only work on Xray and are ignored by %1$s.</string>
+
 </resources>

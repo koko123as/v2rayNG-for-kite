@@ -16,7 +16,10 @@ import com.v2ray.ang.AppConfig.LOOPBACK
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.contracts.Tun2SocksControl
+import com.v2ray.ang.contracts.TunOpener
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.core.CoreTypeResolver
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.NotificationManager
@@ -24,13 +27,18 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.root.RootLanSharing
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import libv2ray.TunConfig
 import java.lang.ref.SoftReference
 import java.util.concurrent.atomic.AtomicBoolean
 
 @SuppressLint("VpnServicePolicy")
-class CoreVpnService : VpnService(), ServiceControl {
+class CoreVpnService : VpnService(), ServiceControl, TunOpener {
     private lateinit var mInterface: ParcelFileDescriptor
+    @Volatile
     private var isRunning = false
+
+    /** Core of the selected profile when the service was set up. */
+    private var setupCore: CoreType = CoreType.XRAY
     private var tun2SocksService: Tun2SocksControl? = null
     private val isStartingLock = AtomicBoolean(false)
 
@@ -102,11 +110,15 @@ class CoreVpnService : VpnService(), ServiceControl {
     }
 
     override fun startService() {
-        if (!::mInterface.isInitialized) {
-            LogUtil.e(AppConfig.TAG, "StartCore-VPN: Interface not initialized")
-            return
+        // sing-box opens the interface itself through openTun() when its tun inbound starts.
+        val vpnInterface = if (setupCore == CoreType.SING_BOX) null else {
+            if (!::mInterface.isInitialized) {
+                LogUtil.e(AppConfig.TAG, "StartCore-VPN: Interface not initialized")
+                return
+            }
+            mInterface
         }
-        if (!CoreServiceManager.startCoreLoop(mInterface)) {
+        if (!CoreServiceManager.startCoreLoop(vpnInterface)) {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: Failed to start core loop")
             stopAllService()
             return
@@ -144,14 +156,86 @@ class CoreVpnService : VpnService(), ServiceControl {
             return false
         }
 
+        setupCore = CoreTypeResolver.resolveSelected() ?: CoreType.XRAY
+        if (setupCore == CoreType.SING_BOX) {
+            // The VpnService is built in openTun() from the addresses and routes sing-box
+            // computes for its tun inbound.
+            CoreServiceManager.setTunOpener(this)
+            isRunning = true
+            return true
+        }
+
         if (configureVpnService() != true) {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: Configuration failed")
             return false
         }
 
-        runTun2socks()
+        // hev-socks5-tunnel only wraps Xray; mihomo reads the descriptor directly.
+        if (setupCore == CoreType.XRAY) {
+            runTun2socks()
+        }
         return true
     }
+
+    /**
+     * Builds the VpnService for sing-box: the addresses, routes, MTU and DNS server of its tun
+     * inbound, plus the app's per-app proxy settings. Called from a sing-box thread; returns the
+     * descriptor, which stays owned by this service (sing-box runs on a dup).
+     */
+    @Synchronized
+    override fun openTun(config: TunConfig): Int {
+        if (!isRunning) throw IllegalStateException("VPN service is stopping")
+        val builder = Builder()
+        builder.setMtu(config.getMTU().takeIf { it > 0 } ?: SettingsManager.getVpnMtu())
+        val inet4 = splitPrefixes(config.inet4Address)
+        val inet6 = splitPrefixes(config.inet6Address)
+        if (inet4.isEmpty() && inet6.isEmpty()) throw IllegalArgumentException("tun inbound has no address")
+        inet4.forEach { (address, prefix) -> builder.addAddress(address, prefix) }
+        inet6.forEach { (address, prefix) -> builder.addAddress(address, prefix) }
+        if (config.autoRoute) {
+            val routes4 = splitPrefixes(config.inet4RouteRange)
+            if (inet4.isNotEmpty()) {
+                if (routes4.isEmpty()) builder.addRoute("0.0.0.0", 0) else routes4.forEach { (a, p) -> builder.addRoute(a, p) }
+            }
+            val routes6 = splitPrefixes(config.inet6RouteRange)
+            if (inet6.isNotEmpty()) {
+                if (routes6.isEmpty()) builder.addRoute("::", 0) else routes6.forEach { (a, p) -> builder.addRoute(a, p) }
+            }
+        }
+        val dnsServers = config.getDNSServer().split(",").map { it.trim() }.filter { Utils.isPureIpAddress(it) }
+            .ifEmpty { SettingsManager.getVpnDnsServers().filter { Utils.isPureIpAddress(it) } }
+        dnsServers.forEach { builder.addDnsServer(it) }
+
+        configurePerAppProxy(builder)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setMetered(false)
+            val proxyPort = config.getHTTPProxyPort()
+            if (config.getHTTPProxyServer().isNotEmpty() && proxyPort > 0) {
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy(config.getHTTPProxyServer(), proxyPort))
+            } else if (MmkvManager.decodeSettingsBool(AppConfig.PREF_APPEND_HTTP_PROXY)) {
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy(LOOPBACK, SettingsManager.getSocksPort()))
+            }
+        }
+
+        try {
+            if (::mInterface.isInitialized) {
+                mInterface.close()
+            }
+        } catch (e: Exception) {
+            LogUtil.w(AppConfig.TAG, "Failed to close old interface", e)
+        }
+        mInterface = builder.establish() ?: throw IllegalStateException("VPN permission is not granted")
+        LogUtil.i(AppConfig.TAG, "StartCore-VPN: tun interface opened for sing-box")
+        return mInterface.fd
+    }
+
+    private fun splitPrefixes(value: String?): List<Pair<String, Int>> =
+        value.orEmpty().split(",").mapNotNull { item ->
+            val prefix = item.trim()
+            val address = prefix.substringBefore("/")
+            val bits = prefix.substringAfter("/", "").toIntOrNull() ?: return@mapNotNull null
+            if (address.isEmpty()) null else address to bits
+        }
 
     /**
      * Configures the VPN service.
@@ -248,7 +332,9 @@ class CoreVpnService : VpnService(), ServiceControl {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
             if (MmkvManager.decodeSettingsBool(AppConfig.PREF_APPEND_HTTP_PROXY)) {
-                builder.setHttpProxy(ProxyInfo.buildDirectProxy(LOOPBACK, SettingsManager.getHttpPort()))
+                // mihomo and sing-box serve HTTP on their mixed (SOCKS) port.
+                val port = if (setupCore == CoreType.XRAY) SettingsManager.getHttpPort() else SettingsManager.getSocksPort()
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy(LOOPBACK, port))
             }
         }
     }
@@ -331,6 +417,7 @@ class CoreVpnService : VpnService(), ServiceControl {
         RootLanSharing.stopClientSharing(this)
 
         CoreServiceManager.stopCoreLoop()
+        CoreServiceManager.setTunOpener(null)
 
         if (isForced) {
             //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped

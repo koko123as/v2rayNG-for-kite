@@ -2,6 +2,8 @@ package com.v2ray.ang.root
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.enums.CoreType
 import com.v2ray.ang.handler.MmkvManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +30,15 @@ object RootLanSharing {
             if (lanShareJob != null) return false
 
             lanSharingStarted = true
-            lanShareJob = CoroutineScope(Dispatchers.IO).launch { RootProxyManager.startClientSharing(context) }
+            // mihomo / sing-box take tethered clients on their own redirect and DNS listeners.
+            val nativeCore = CoreServiceManager.getRunningCore()?.let { it != CoreType.XRAY } == true
+            lanShareJob = CoroutineScope(Dispatchers.IO).launch {
+                if (nativeCore) {
+                    RootProxyManager.startNativeClientSharing(context, AppConfig.PORT_ROOT_REDIR, AppConfig.PORT_ROOT_DNS)
+                } else {
+                    RootProxyManager.startClientSharing(context)
+                }
+            }
         }
 
         return true

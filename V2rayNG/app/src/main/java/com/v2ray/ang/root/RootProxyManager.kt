@@ -80,6 +80,201 @@ object RootProxyManager {
         return true
     }
 
+    /**
+     * Root mode for mihomo / sing-box. The core runs the traffic through its own listeners, no
+     * tun and no helper process: TCP of the captured apps is REDIRECTed (nat) to the core's
+     * redirect listener and DNS of every app to its DNS listener. Per-app selection, the LAN
+     * bypass, IPv6 (redirected when enabled, blackholed otherwise) and LAN sharing follow the
+     * hev setup.
+     *
+     * UDP cannot be TPROXYed: the listener would need IP_TRANSPARENT (CAP_NET_ADMIN) and the
+     * core runs in the unprivileged app process. QUIC of captured apps is rejected so it falls
+     * back to TCP; other UDP stays direct.
+     */
+    fun startNative(context: Context, redirPort: Int, dnsPort: Int): Boolean =
+        runNativeSetup(context, redirPort, dnsPort, captureDeviceTraffic = true)
+
+    /** LAN/tethering sharing into mihomo / sing-box while the device uses the VpnService. */
+    fun startNativeClientSharing(context: Context, redirPort: Int, dnsPort: Int): Boolean =
+        runNativeSetup(context, redirPort, dnsPort, captureDeviceTraffic = false)
+
+    private fun runNativeSetup(context: Context, redirPort: Int, dnsPort: Int, captureDeviceTraffic: Boolean): Boolean {
+        teardown(context)
+        val runDir = File(context.filesDir, AppConfig.ROOT_RUNTIME_DIR)
+        if (!runDir.isDirectory && !runDir.mkdirs()) {
+            LogUtil.e(AppConfig.TAG, "RootProxyManager: failed to create runtime directory at ${runDir.absolutePath}")
+            return false
+        }
+        val perAppEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY)
+        val selectedUids = if (perAppEnabled) {
+            val pkgs = MmkvManager.decodeSettingsStringSet(AppConfig.PREF_PER_APP_PROXY_SET)?.toList().orEmpty()
+            if (pkgs.isNotEmpty()) PackageUidResolver.packageNamesToUids(context, pkgs) else emptyList()
+        } else {
+            emptyList()
+        }
+        val script = buildNativeSetup(
+            NativeSetup(
+                appUid = context.applicationInfo.uid,
+                perAppEnabled = perAppEnabled,
+                bypassApps = MmkvManager.decodeSettingsBool(AppConfig.PREF_BYPASS_APPS),
+                selectedUids = selectedUids,
+                ipv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED),
+                lanShare = !captureDeviceTraffic || MmkvManager.decodeSettingsBool(AppConfig.PREF_ROOT_LAN_SHARING),
+                captureDeviceTraffic = captureDeviceTraffic,
+                redirPort = redirPort,
+                dnsPort = dnsPort,
+                corePid = Process.myPid(),
+                oomGuardPidFile = File(runDir, "oomguard.pid").absolutePath,
+            )
+        )
+        val result = RootShell.runScript(context, "setup_rules.sh", script)
+        if (!result.success) {
+            LogUtil.e(AppConfig.TAG, "RootProxyManager: native setup failed, rolling back:\n${result.output}")
+            teardown(context)
+            return false
+        }
+        LogUtil.i(AppConfig.TAG, "RootProxyManager: native core rules installed (capture=$captureDeviceTraffic)")
+        return true
+    }
+
+    internal data class NativeSetup(
+        val appUid: Int,
+        val perAppEnabled: Boolean,
+        val bypassApps: Boolean,
+        val selectedUids: List<String>,
+        val ipv6: Boolean,
+        val lanShare: Boolean,
+        val captureDeviceTraffic: Boolean,
+        val redirPort: Int,
+        val dnsPort: Int,
+        val corePid: Int,
+        val oomGuardPidFile: String,
+    )
+
+    /** Setup script of [startNative] / [startNativeClientSharing]. Pure for tests. */
+    internal fun buildNativeSetup(setup: NativeSetup): String = buildString {
+        appendLine("set -e")
+        // Protect the core (this app process) from the low-memory killer, as in hev root mode.
+        appendLine("nohup sh -c 'while true; do echo ${AppConfig.ROOT_OOM_SCORE} > /proc/${setup.corePid}/oom_score_adj 2>/dev/null; sleep 5; done' >/dev/null 2>&1 &")
+        appendLine("echo \$! > '${setup.oomGuardPidFile}'")
+        if (setup.captureDeviceTraffic) {
+            append(buildNativeRedirect("iptables", setup))
+            append(buildQuicReject("iptables", setup))
+        }
+        if (setup.lanShare) {
+            append(buildNativeLanShare(setup))
+        }
+        if (setup.captureDeviceTraffic) {
+            // IPv6 is best-effort: never fail the (working) IPv4 setup over it.
+            appendLine("set +e")
+            if (setup.ipv6) {
+                append(buildNativeRedirect("ip6tables", setup))
+                append(buildQuicReject("ip6tables", setup))
+            } else {
+                append(buildV6Blackhole(setup.appUid, setup.perAppEnabled, setup.bypassApps, setup.selectedUids))
+            }
+        }
+    }
+
+    /**
+     * nat OUTPUT chain: DNS of every app to the core's DNS listener (before the LAN RETURNs, so
+     * queries to a router resolver are answered by the core too), TCP of the captured apps to its
+     * redirect listener. The core's own traffic (app uid) always goes out directly.
+     */
+    private fun buildNativeRedirect(cmd: String, setup: NativeSetup): String {
+        val chain = AppConfig.ROOT_NAT_CHAIN
+        val allowMode = setup.perAppEnabled && !setup.bypassApps
+        val bypassSelected = setup.perAppEnabled && setup.bypassApps && setup.selectedUids.isNotEmpty()
+        val cidrs = if (cmd == "ip6tables") bypassCidrsV6 else bypassCidrs
+        return buildString {
+            appendLine("$cmd -t nat -N $chain 2>/dev/null || true")
+            appendLine("$cmd -t nat -F $chain")
+            appendLine("$cmd -t nat -A $chain -m owner --uid-owner ${setup.appUid} -j RETURN")
+            if (bypassSelected) {
+                setup.selectedUids.forEach { appendLine("$cmd -t nat -A $chain -m owner --uid-owner $it -j RETURN") }
+            }
+            appendLine("$cmd -t nat -A $chain -p udp --dport 53 -j REDIRECT --to-ports ${setup.dnsPort}")
+            appendLine("$cmd -t nat -A $chain -p tcp --dport 53 -j REDIRECT --to-ports ${setup.dnsPort}")
+            cidrs.forEach { appendLine("$cmd -t nat -A $chain -d $it -j RETURN") }
+            if (allowMode) {
+                // Fail closed: no resolved uid redirects nothing (see buildMangleMarking).
+                setup.selectedUids.forEach {
+                    appendLine("$cmd -t nat -A $chain -m owner --uid-owner $it -p tcp -j REDIRECT --to-ports ${setup.redirPort}")
+                }
+            } else {
+                appendLine("$cmd -t nat -A $chain -p tcp -j REDIRECT --to-ports ${setup.redirPort}")
+            }
+            appendLine("$cmd -t nat -D OUTPUT -j $chain 2>/dev/null || true")
+            appendLine("$cmd -t nat -A OUTPUT -j $chain")
+        }
+    }
+
+    /** filter OUTPUT chain: reject QUIC of the captured apps so it falls back to (proxied) TCP. */
+    private fun buildQuicReject(cmd: String, setup: NativeSetup): String {
+        val chain = AppConfig.ROOT_QUIC_CHAIN
+        val allowMode = setup.perAppEnabled && !setup.bypassApps
+        val bypassSelected = setup.perAppEnabled && setup.bypassApps && setup.selectedUids.isNotEmpty()
+        val cidrs = if (cmd == "ip6tables") bypassCidrsV6 else bypassCidrs
+        val reject = if (cmd == "ip6tables") "-j REJECT --reject-with icmp6-port-unreachable" else "-j REJECT --reject-with icmp-port-unreachable"
+        return buildString {
+            appendLine("$cmd -t filter -N $chain 2>/dev/null || true")
+            appendLine("$cmd -t filter -F $chain")
+            appendLine("$cmd -t filter -A $chain -m owner --uid-owner ${setup.appUid} -j RETURN")
+            if (bypassSelected) {
+                setup.selectedUids.forEach { appendLine("$cmd -t filter -A $chain -m owner --uid-owner $it -j RETURN") }
+            }
+            cidrs.forEach { appendLine("$cmd -t filter -A $chain -d $it -j RETURN") }
+            if (allowMode) {
+                setup.selectedUids.forEach { appendLine("$cmd -t filter -A $chain -m owner --uid-owner $it -p udp --dport 443 $reject") }
+            } else {
+                appendLine("$cmd -t filter -A $chain -p udp --dport 443 $reject")
+            }
+            appendLine("$cmd -t filter -D OUTPUT -j $chain 2>/dev/null || true")
+            appendLine("$cmd -t filter -A OUTPUT -j $chain")
+        }
+    }
+
+    /**
+     * Tethered/hotspot clients: DNS and TCP from private source ranges to the core's listeners
+     * (which then listen on all addresses), QUIC rejected, native IPv6 forwarding rejected so
+     * it cannot leak past the core.
+     */
+    private fun buildNativeLanShare(setup: NativeSetup): String {
+        val chain = AppConfig.ROOT_NAT_PRE_CHAIN
+        val fwd = AppConfig.ROOT_FWD_CHAIN
+        val v6fwd = AppConfig.ROOT_V6_FWD_CHAIN
+        val clientCidrs = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+        return buildString {
+            appendLine("set +e")
+            appendLine("iptables -t nat -N $chain 2>/dev/null || true")
+            appendLine("iptables -t nat -F $chain")
+            appendLine("iptables -t nat -A $chain -i lo -j RETURN")
+            clientCidrs.forEach { source ->
+                appendLine("iptables -t nat -A $chain -s $source -p udp --dport 53 -j REDIRECT --to-ports ${setup.dnsPort}")
+                appendLine("iptables -t nat -A $chain -s $source -p tcp --dport 53 -j REDIRECT --to-ports ${setup.dnsPort}")
+            }
+            appendLine("iptables -t nat -A $chain -m addrtype --dst-type LOCAL -j RETURN")
+            bypassCidrs.forEach { appendLine("iptables -t nat -A $chain -d $it -j RETURN") }
+            clientCidrs.forEach { source ->
+                appendLine("iptables -t nat -A $chain -s $source -p tcp -j REDIRECT --to-ports ${setup.redirPort}")
+            }
+            appendLine("iptables -t nat -D PREROUTING -j $chain 2>/dev/null || true")
+            appendLine("iptables -t nat -A PREROUTING -j $chain")
+            appendLine("iptables -N $fwd 2>/dev/null || true")
+            appendLine("iptables -F $fwd")
+            clientCidrs.forEach { source ->
+                appendLine("iptables -A $fwd -s $source -p udp --dport 443 -j REJECT --reject-with icmp-port-unreachable")
+            }
+            appendLine("iptables -D FORWARD -j $fwd 2>/dev/null || true")
+            appendLine("iptables -I FORWARD -j $fwd")
+            appendLine("ip6tables -N $v6fwd 2>/dev/null || true")
+            appendLine("ip6tables -F $v6fwd")
+            appendLine("ip6tables -A $v6fwd -j REJECT --reject-with icmp6-no-route")
+            appendLine("ip6tables -D FORWARD -j $v6fwd 2>/dev/null || true")
+            appendLine("ip6tables -I FORWARD -j $v6fwd")
+        }
+    }
+
     /** Remove all rules and stop helper processes. Safe to call repeatedly. */
     fun stop(context: Context) {
         teardown(context)
@@ -515,6 +710,18 @@ object RootProxyManager {
                 appendLine("$cmd -t mangle -F $CHAIN 2>/dev/null || true")
                 appendLine("$cmd -t mangle -X $CHAIN 2>/dev/null || true")
             }
+            // mihomo / sing-box root mode chains (harmless if absent)
+            for (cmd in listOf("iptables", "ip6tables")) {
+                appendLine("$cmd -t nat -D OUTPUT -j ${AppConfig.ROOT_NAT_CHAIN} 2>/dev/null || true")
+                appendLine("$cmd -t nat -F ${AppConfig.ROOT_NAT_CHAIN} 2>/dev/null || true")
+                appendLine("$cmd -t nat -X ${AppConfig.ROOT_NAT_CHAIN} 2>/dev/null || true")
+                appendLine("$cmd -t filter -D OUTPUT -j ${AppConfig.ROOT_QUIC_CHAIN} 2>/dev/null || true")
+                appendLine("$cmd -t filter -F ${AppConfig.ROOT_QUIC_CHAIN} 2>/dev/null || true")
+                appendLine("$cmd -t filter -X ${AppConfig.ROOT_QUIC_CHAIN} 2>/dev/null || true")
+            }
+            appendLine("iptables -t nat -D PREROUTING -j ${AppConfig.ROOT_NAT_PRE_CHAIN} 2>/dev/null || true")
+            appendLine("iptables -t nat -F ${AppConfig.ROOT_NAT_PRE_CHAIN} 2>/dev/null || true")
+            appendLine("iptables -t nat -X ${AppConfig.ROOT_NAT_PRE_CHAIN} 2>/dev/null || true")
             // IPv6 blackhole chain (only set up when v6 is disabled; harmless if absent)
             appendLine("ip6tables -t filter -D OUTPUT -j ${AppConfig.ROOT_V6_CHAIN} 2>/dev/null || true")
             appendLine("ip6tables -t filter -F ${AppConfig.ROOT_V6_CHAIN} 2>/dev/null || true")
